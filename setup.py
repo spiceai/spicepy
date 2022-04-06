@@ -16,7 +16,7 @@ def setup_package():
         author_email='corentin@spiceai.io',
         url='https://github.com/spicehq/spicedata-py',
         description='Simple Apache Arrow Flight endpoint access',
-        license='MIT',
+        license='Apache',
         packages=['spicedata'],
         install_requires=['pyarrow', 'pandas'],
         python_requires='>=3.8'
