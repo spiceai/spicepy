@@ -23,12 +23,23 @@ class Client:
                     urlretrieve('https://pki.google.com/roots.pem', str(temp_cert_path))
                 os.environ[env_name] = str(temp_cert_path)
 
+        self._api_key = api_key
         self._flight_client = flight.connect(url)
-        headers = [self._flight_client.authenticate_basic_token('', api_key)]
+        self._flight_options = flight.FlightCallOptions()
+        self._authenticate()
+
+    def _authenticate(self):
+        headers = [self._flight_client.authenticate_basic_token('', self._api_key)]
         self._flight_options = flight.FlightCallOptions(headers=headers)
 
     def query(self, query: str) -> pd.DataFrame:
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options)
-        reader = self._flight_client.do_get(flight_info.endpoints[0].ticket, self._flight_options)
+        try:
+            reader = self._flight_client.do_get(flight_info.endpoints[0].ticket, self._flight_options)
+        except flight.FlightUnauthenticatedError:
+            print('Re authenticating')
+            self._authenticate()
+            reader = self._flight_client.do_get(flight_info.endpoints[0].ticket, self._flight_options)
+
         return reader.read_pandas()
