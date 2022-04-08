@@ -12,7 +12,7 @@ def setup_package():
         name="spicepy",
         version="0.1.0",
         maintainer="Spice AI, Inc.",
-        maintainer_email="webmaster@spiceai.io"
+        maintainer_email="webmaster@spiceai.io",
         author="Corentin Risselin",
         author_email="corentin@spiceai.io",
         url="https://github.com/spicehq/spice-py",
