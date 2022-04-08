@@ -1,25 +1,25 @@
 # spice-py
 
-Spice client for Python.
+Spice.xyz client library.
 
 ## Installation
 
 From `pip`:
 
-```
-pip install spicedata
+```bash
+pip install git+https://github.com/spicehq/spice-py
 ```
 
 From code:
 
-```
+```bash
 pip install -e .
 ```
 
 ## Usage
 
 ```python
-from spicedata import Client
+from spicepy import Client
 
 client = Client('API_KEY')
 data = client.query('SELECT * FROM eth.recent_blocks LIMIT 10;')

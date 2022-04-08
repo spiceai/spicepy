@@ -52,7 +52,6 @@ class Client:
                 flight_info.endpoints[0].ticket, self._flight_options
             )
         except flight.FlightUnauthenticatedError:
-            print("Re authenticating")
             self._authenticate()
             reader = self._flight_client.do_get(
                 flight_info.endpoints[0].ticket, self._flight_options
