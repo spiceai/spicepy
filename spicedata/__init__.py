@@ -1,8 +1,8 @@
 """
-spicedata
+spicepy
 =====
 
-Provides easy access to data from the spice Apache Flight endpoints.
+Spice.xyz client library.
 """
 
 from ._client import Client

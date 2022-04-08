@@ -1,2 +1,2 @@
 mrproper:
-	@rm -rf build dist spicedata.egg-info spicedata/__pycache__
+	@rm -rf build dist spicepy.egg-info spicepy/__pycache__
