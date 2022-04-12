@@ -5,7 +5,6 @@ import tempfile
 from typing import Union
 from urllib.request import urlretrieve
 
-import pandas as pd
 from pyarrow import flight
 
 
@@ -28,10 +27,10 @@ class Client:
         if not cert_path.exists():
             env_name = "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"
             if env_name not in os.environ or not Path(os.environ[env_name]).exists():
-                temp_cert_path = Path(tempfile.gettempdir()) / "roots.pem"
+                temp_cert_path = Path(tempfile.gettempdir()) / "isrgrootx1.pem"
                 if not Path(temp_cert_path).exists():
                     ssl._create_default_https_context = ssl._create_unverified_context
-                    urlretrieve("https://pki.google.com/roots.pem", str(temp_cert_path))
+                    urlretrieve("https://letsencrypt.org/certs/isrgrootx1.pem", str(temp_cert_path))
                 os.environ[env_name] = str(temp_cert_path)
 
         self._api_key = api_key
