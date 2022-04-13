@@ -27,7 +27,7 @@ jobs:
       - name: Install pylint
         run: |
           pip install pylint
-      - name: Analysing the AI code with pylint
+      - name: Analysing with pylint
         run: |
           pylint spicepy tests
 
