@@ -1,11 +1,25 @@
 import os
 from pathlib import Path
+import platform
 import ssl
 import tempfile
 from typing import Union
 from urllib.request import urlretrieve
 
-from pyarrow import flight
+
+def is_m1() -> bool:
+    return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
+
+
+try:
+    from pyarrow import flight
+except (ImportError, ModuleNotFoundError) as error:
+    if is_m1():
+        raise ImportError(
+            "Couldn't import flight from pyarrow. You are using an Apple M1 machine,"
+            " we recommend reading the installation section at "
+            "https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
+    raise error from error
 
 
 class Client:
