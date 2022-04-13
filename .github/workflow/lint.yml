@@ -43,7 +43,7 @@ jobs:
           working-directory: ai/src
           run: |
             pip install flake8
-      - name: Analysing the AI code with pylint
+      - name: Analysing the AI code with flake8
           working-directory: ai/src
           run: |
             flake8 spicepy
