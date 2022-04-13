@@ -16,7 +16,7 @@ try:
 except (ImportError, ModuleNotFoundError) as error:
     if is_m1():
         raise ImportError(
-            "Couldn't import flight from pyarrow. You are using an Apple M1 machine,"
+            "Failed to import pyarrow. Detected Apple M1 system. Installation of pyarrow on Apple M1 systems requires additional steps. See https://docs.spice.xyz/sdks/python-sdk#m1-macs."
             " we recommend reading the installation section at "
             "https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
     raise error from error
