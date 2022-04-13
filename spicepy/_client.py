@@ -7,18 +7,18 @@ from typing import Union
 from urllib.request import urlretrieve
 
 
-def is_m1() -> bool:
+def is_macos_arm64() -> bool:
     return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
 
 
 try:
     from pyarrow import flight
 except (ImportError, ModuleNotFoundError) as error:
-    if is_m1():
+    if is_macos_arm64():
         raise ImportError(
-            "Failed to import pyarrow. Detected Apple M1 system. Installation of pyarrow on Apple M1 systems requires additional steps. See https://docs.spice.xyz/sdks/python-sdk#m1-macs."
-            " we recommend reading the installation section at "
-            "https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
+            "Failed to import pyarrow. Detected Apple M1 system."
+            " Installation of pyarrow on Apple M1 systems requires additional steps."
+            " See https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
     raise error from error
 
 
