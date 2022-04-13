@@ -2,8 +2,7 @@ name: Lint code base
 
 on:
   pull_request:
-    paths:
-    - "spicepy/**"
+    branches: [ trunk ]
 
 jobs:
   lint-pylint:
