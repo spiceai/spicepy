@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: [ '3.7', '3.8', '3.9' ]
     name: Lint on ${{ matrix.os }} with pylint ${{ matrix.python-version }}
     steps:
@@ -36,7 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: [ '3.7', '3.8', '3.9' ]
     name: Lint on ${{ matrix.os }} with flake8 ${{ matrix.python-version }}
     steps:
