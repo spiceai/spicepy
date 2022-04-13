@@ -4,16 +4,24 @@ on:
   pull_request:
     branches:
      - trunk
+  push:
+    branches:
+    - trunk
 
 jobs:
   lint-pylint:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: [ '3.7', '3.8', '3.9' ]
+    name: Lint on ${{ matrix.os }} with pylint ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python 3.8
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v1
         with:
-          python-version: 3.8
+          python-version: ${{ matrix.python-version }}
       - name: Install requirements
         run: |
           pip install -r requirements.txt
@@ -26,12 +34,17 @@ jobs:
 
   lint-flake8:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: [ '3.7', '3.8', '3.9' ]
+    name: Lint on ${{ matrix.os }} with flake8 ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python 3.8
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v1
         with:
-          python-version: 3.8
+          python-version: ${{ matrix.python-version }}
       - name: Install requirements
         run: |
           pip install -r requirements.txt
