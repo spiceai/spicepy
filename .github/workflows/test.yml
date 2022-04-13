@@ -19,7 +19,7 @@ jobs:
           pip install -r requirements.txt
       - name: Install pytest
         run: |
-          pip install git+https://github.com/spicehq/spice-py pytest
+          pip install pytest
       - name: Running tests
         run: |
           pytest

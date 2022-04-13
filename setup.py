@@ -4,11 +4,11 @@
 """
 
 
-import setuptools
+from setuptools import setup, find_packages
 
 
 def setup_package():
-    setuptools.setup(
+    setup(
         name="spicepy",
         version="0.1.0",
         maintainer="Spice AI, Inc.",
@@ -18,7 +18,7 @@ def setup_package():
         url="https://github.com/spicehq/spice-py",
         description="Spice.xyz client library - data and AI infrastructure for web3.",
         license="Apache 2.0",
-        packages=["spicepy"],
+        packages=find_packages("spicepy", exclude=["test"]),
         install_requires=["pyarrow", "pandas"],
         python_requires=">=3.7",
     )
