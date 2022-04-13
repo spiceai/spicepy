@@ -18,7 +18,7 @@ def setup_package():
         url="https://github.com/spicehq/spice-py",
         description="Spice.xyz client library - data and AI infrastructure for web3.",
         license="Apache 2.0",
-        packages=find_packages("spicepy", exclude=["tests"]),
+        packages=["spicepy"],
         install_requires=["pyarrow", "pandas"],
         python_requires=">=3.7",
     )

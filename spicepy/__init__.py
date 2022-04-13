@@ -1,7 +1,6 @@
 """
 spicepy
 =====
-
 Spice.xyz client library.
 """
 

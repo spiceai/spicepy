@@ -29,7 +29,7 @@ jobs:
           pip install pylint
       - name: Analysing the AI code with pylint
         run: |
-          pylint spicepy
+          pylint spicepy tests
 
   lint-flake8:
     runs-on: ubuntu-latest
@@ -51,4 +51,4 @@ jobs:
           pip install flake8
       - name: Analysing the AI code with flake8
         run: |
-          flake8 spicepy
+          flake8 spicepy tests
