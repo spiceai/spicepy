@@ -6,7 +6,7 @@ on:
     - "spicepy/**"
 
 jobs:
-  linterpylint:
+  lint-pylint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -27,7 +27,7 @@ jobs:
           run: |
             pylint spicepy
 
-  linter-flake8:
+  lint-flake8:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
