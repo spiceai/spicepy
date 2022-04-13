@@ -3,10 +3,13 @@ name: Lint code base
 on:
   pull_request:
     branches:
-     - trunk
+      - trunk
   push:
     branches:
-    - trunk
+      - trunk
+      - release-*
+    tags:
+      - v*
 
 jobs:
   lint-pylint:

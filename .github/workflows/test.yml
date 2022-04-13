@@ -3,10 +3,13 @@ name: Test code base
 on:
   pull_request:
     branches:
-     - trunk
+      - trunk
   push:
     branches:
-    - trunk
+      - trunk
+      - release-*
+    tags:
+      - v*
 
 jobs:
   pytest:

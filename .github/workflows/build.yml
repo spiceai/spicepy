@@ -3,7 +3,13 @@ name: Build package
 on:
   pull_request:
     branches:
-     - trunk
+      - trunk
+  push:
+    branches:
+      - trunk
+      - release-*
+    tags:
+      - v*
 
 jobs:
   Build:
