@@ -1,5 +1,7 @@
 *.pyc
+*.DS_Store
 
+.pytest_cache
 build
 dist
 spicepy.egg-info
