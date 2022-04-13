@@ -14,15 +14,12 @@ jobs:
           with:
             python-version: 3.8
       - name: Install requirements
-          working-directory: ai/src
           run: |
             pip install -r requirements.txt
       - name: Install pylint
-          working-directory: ai/src
           run: |
             pip install pylint
       - name: Analysing the AI code with pylint
-          working-directory: ai/src
           run: |
             pylint spicepy
 
