@@ -3,10 +3,13 @@ name: Lint code base
 on:
   pull_request:
     branches:
-     - trunk
+      - trunk
   push:
     branches:
-    - trunk
+      - trunk
+      - release-*
+    tags:
+      - v*
 
 jobs:
   lint-pylint:
@@ -27,9 +30,9 @@ jobs:
       - name: Install pylint
         run: |
           pip install pylint
-      - name: Analysing the AI code with pylint
+      - name: Analysing with pylint
         run: |
-          pylint spicepy
+          pylint spicepy tests
 
   lint-flake8:
     runs-on: ubuntu-latest
@@ -49,6 +52,6 @@ jobs:
       - name: Install flake8
         run: |
           pip install flake8
-      - name: Analysing the AI code with flake8
+      - name: Analysing with flake8
         run: |
-          flake8 spicepy
+          flake8 spicepy tests
