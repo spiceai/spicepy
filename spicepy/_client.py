@@ -38,6 +38,7 @@ class Client:
                 if isinstance(tls_root_cert, Path)
                 else Path(tls_root_cert)
             )
+        self.root_cert = None
         if not cert_path.exists():
             env_name = "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"
             if env_name not in os.environ or not Path(os.environ[env_name]).exists():
@@ -45,10 +46,11 @@ class Client:
                 if not Path(temp_cert_path).exists():
                     ssl._create_default_https_context = ssl._create_unverified_context
                     urlretrieve("https://letsencrypt.org/certs/isrgrootx1.pem", str(temp_cert_path))
-                os.environ[env_name] = str(temp_cert_path)
+                with open(temp_cert_path, 'rb') as cert_file:
+                    self.root_cert = cert_file.read()
 
         self._api_key = api_key
-        self._flight_client = flight.connect(url)
+        self._flight_client = flight.connect(url, tls_root_certs=self.root_cert)
         self._flight_options = flight.FlightCallOptions()
         self._authenticate()
 
