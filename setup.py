@@ -19,7 +19,7 @@ def setup_package():
         description="Spice.xyz client library - data and AI infrastructure for web3.",
         license="Apache 2.0",
         packages=["spicepy"],
-        install_requires=["pyarrow", "pandas"],
+        install_requires=["pyarrow", "pandas", "web3"],
         python_requires=">=3.7",
     )
 
