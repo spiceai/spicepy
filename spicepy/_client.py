@@ -55,7 +55,8 @@ class Client:
         self._flight_client = flight.connect(url, tls_root_certs=self.root_cert)
         self._flight_options = flight.FlightCallOptions()
         self._authenticate()
-        self.w3 = Web3(Web3.HTTPProvider(f"https://data.spiceai.io/eth?api_key={self._api_key}"))
+        self.w3 = Web3(Web3.HTTPProvider(  # pylint: disable=C0103
+            f"https://data.spiceai.io/eth?api_key={self._api_key}"))
 
     def _authenticate(self):
         headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
