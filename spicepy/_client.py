@@ -6,6 +6,8 @@ import tempfile
 from typing import Union
 from urllib.request import urlretrieve
 
+from web3 import Web3
+
 
 def is_macos_arm64() -> bool:
     return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
@@ -53,6 +55,8 @@ class Client:
         self._flight_client = flight.connect(url, tls_root_certs=self.root_cert)
         self._flight_options = flight.FlightCallOptions()
         self._authenticate()
+        self.w3 = Web3(Web3.HTTPProvider(  # pylint: disable=C0103
+            f"https://data.spiceai.io/eth?api_key={self._api_key}"))
 
     def _authenticate(self):
         headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
