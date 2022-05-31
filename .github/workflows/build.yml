@@ -26,6 +26,7 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
       - name: Install spicepy from pip
         run: |
           pip install git+https://github.com/spicehq/spice-py
