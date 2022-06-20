@@ -7,7 +7,7 @@ Spice.xyz client library.
 From `pip`:
 
 ```bash
-pip install git+https://github.com/spicehq/spice-py
+pip install git+https://github.com/spiceai/spice-py
 ```
 
 From code:
