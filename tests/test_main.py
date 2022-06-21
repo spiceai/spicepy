@@ -1,5 +1,6 @@
-from spicepy import Client
+
 import os
+from spicepy import Client
 
 
 def test_recent_blocks():

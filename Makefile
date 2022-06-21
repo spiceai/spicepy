@@ -9,3 +9,8 @@ test:
 .PHONY: apple-silicon-requirements
 apple-silicon-requirements:
 	conda install pyarrow=8 pandas
+
+.PHONY: lint
+lint:
+	pip install pylint
+	pylint spicepy tests
