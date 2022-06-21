@@ -1,4 +1,4 @@
-## Contributing to spice-py
+## Contributing to spicepy
 
 ### Developing
 

@@ -1,19 +1,11 @@
-# spice-py
+# spicepy
 
-Spice.xyz client library.
+Spice.xyz client library for Python.
 
 ## Installation
 
-From `pip`:
-
 ```bash
-pip install git+https://github.com/spiceai/spice-py
-```
-
-From code:
-
-```bash
-pip install -e .
+pip install git+https://github.com/spiceai/spicepy
 ```
 
 ## Usage
@@ -44,3 +36,7 @@ from spicepy import Client
 client = Client('API_KEY')
 print(client.w3.eth.get_block_number())
 ```
+
+## Documentation
+
+Check out our [Documentation](https://docs.spice.xyz/sdks/python-sdk) to learn more about how to use the Python SDK.
