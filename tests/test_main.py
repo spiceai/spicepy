@@ -2,6 +2,7 @@
 import os
 from spicepy import Client
 
+
 def get_test_client():
     api_key = os.environ["API_KEY"]
     return Client(api_key)
