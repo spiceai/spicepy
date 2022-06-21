@@ -1,8 +1,10 @@
 from spicepy import Client
+import os
 
 
 def test_recent_blocks():
-    client = Client("3534|0a05e0808ff647ea98a656efab3f7e30")
+    api_key = os.environ["API_KEY"]
+    client = Client(api_key)
     data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10;")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
