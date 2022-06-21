@@ -6,18 +6,20 @@ def get_test_client():
     api_key = os.environ["API_KEY"]
     return Client(api_key)
 
+
 def test_recent_blocks():
     client = get_test_client()
     data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10;")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
+
 def test_streaming():
     client = get_test_client()
     query = """
-SELECT number, 
-       "timestamp", 
-       base_fee_per_gas, 
+SELECT number,
+       "timestamp",
+       base_fee_per_gas,
        base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei
 FROM eth.blocks limit 2000
     """
@@ -38,6 +40,7 @@ FROM eth.blocks limit 2000
 
     assert total_rows == 2000
     assert num_batches > 1
+
 
 if __name__ == "__main__":
     test_recent_blocks()
