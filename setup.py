@@ -15,7 +15,7 @@ def setup_package():
         maintainer_email="webmaster@spice.ai",
         author="Spice AI, Inc.",
         author_email="webmaster@spice.ai",
-        url="https://github.com/spiceai/spice-py",
+        url="https://github.com/spiceai/spicepy",
         description="Spice.xyz client library - data and AI infrastructure for web3.",
         license="Apache 2.0",
         packages=["spicepy"],
