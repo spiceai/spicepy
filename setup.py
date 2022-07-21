@@ -20,7 +20,7 @@ def setup_package():
         license="Apache 2.0",
         packages=["spicepy"],
         install_requires=["pyarrow", "pandas", "web3>=6.0.0b2"],
-        python_requires=">=3.8",
+        python_requires=">=3.7",
     )
 
 
