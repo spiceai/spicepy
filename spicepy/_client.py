@@ -21,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as error:
             " See https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
     raise error from error
 
-QUERY_TIMEOUT = 15*60
+DEFAULT_QUERY_TIMEOUT_SECS = 15*60
 
 
 class Client:
@@ -58,7 +58,7 @@ class Client:
 
     def _authenticate(self):
         headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
-        self._flight_options = flight.FlightCallOptions(headers=headers, timeout=QUERY_TIMEOUT)
+        self._flight_options = flight.FlightCallOptions(headers=headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
     def query(self, query: str) -> flight.FlightStreamReader:
         flight_info = self._flight_client.get_flight_info(
@@ -75,6 +75,6 @@ class Client:
             )
         except flight.FlightTimedOutError as exc:
             self._flight_client.cancel(flight_info.endpoints[0].ticket, self._flight_options)
-            raise TimeoutError("Flight request timed out") from exc
+            raise TimeoutError(f"Flight request timed out: {DEFAULT_QUERY_TIMEOUT_SECS}") from exc
 
         return reader
