@@ -21,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as error:
             " See https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
     raise error from error
 
-DEFAULT_QUERY_TIMEOUT_SECS = 15*60
+DEFAULT_QUERY_TIMEOUT_SECS = 10*60
 
 
 class Client:
