@@ -57,10 +57,15 @@ class Client:
         self._authenticate()
 
     def _authenticate(self):
-        headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
-        self._flight_options = flight.FlightCallOptions(headers=headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
+        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
-    def query(self, query: str) -> flight.FlightStreamReader:
+    def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        timeout = kwargs.get("timeout", None)
+        if timeout is not None:
+            if not isinstance(timeout, int) or timeout <= 0:
+                raise ValueError("Timeout must be a positive integer")
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options
         )
