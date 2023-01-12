@@ -79,6 +79,6 @@ class Client:
                 flight_info.endpoints[0].ticket, self._flight_options
             )
         except flight.FlightTimedOutError as exc:
-            raise TimeoutError(f"Flight request timed out: {timeout}") from exc
+            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
