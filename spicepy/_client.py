@@ -22,6 +22,8 @@ except (ImportError, ModuleNotFoundError) as error:
     raise error from error
 
 QUERY_TIMEOUT = 15*60
+
+
 class Client:
     def __init__(
         self,
@@ -73,6 +75,6 @@ class Client:
             )
         except flight.FlightTimedOutError:
             self._flight_client.cancel(flight_info.endpoints[0].ticket, self._flight_options)
-            raise TimeoutError("Flight request timed out") 
+            raise TimeoutError("Flight request timed out")
 
         return reader
