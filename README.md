@@ -16,7 +16,7 @@ pip install git+https://github.com/spiceai/spicepy
 from spicepy import Client
 
 client = Client('API_KEY')
-data = client.query('SELECT * FROM eth.recent_blocks LIMIT 10;')
+data = client.query('SELECT * FROM eth.recent_blocks LIMIT 10;', timeout=10*60)
 pd = data.read_pandas()
 ```
 
@@ -36,6 +36,10 @@ from spicepy import Client
 client = Client('API_KEY')
 print(client.w3.eth.get_block_number())
 ```
+
+User also can manually set timeout in the function call. If no timeout is specified, the query will timeout after 15 mins by default and a TimeoutError exception will be raised.
+
+`timeout` is `int` in seconds. 
 
 ## Documentation
 
