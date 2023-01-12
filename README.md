@@ -37,7 +37,7 @@ client = Client('API_KEY')
 print(client.w3.eth.get_block_number())
 ```
 
-User can manually set timeout in the function call. If no timeout is specified, the query will timeout after 15 mins by default and a TimeoutError exception will be raised.
+A custom timeout can be set by passing the `timeout` parameter in the `query` function call. If no timeout is specified, it will default to a 10 min timeout then cancel the query, and a TimeoutError exception will be raised.
 
 `timeout` is `int` in seconds. 
 
