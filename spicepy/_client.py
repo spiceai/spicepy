@@ -73,8 +73,8 @@ class Client:
             reader = self._flight_client.do_get(
                 flight_info.endpoints[0].ticket, self._flight_options
             )
-        except flight.FlightTimedOutError:
+        except flight.FlightTimedOutError as exc:
             self._flight_client.cancel(flight_info.endpoints[0].ticket, self._flight_options)
-            raise TimeoutError("Flight request timed out")
+            raise TimeoutError("Flight request timed out") from exc
 
         return reader
