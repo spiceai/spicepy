@@ -16,7 +16,7 @@ pip install git+https://github.com/spiceai/spicepy
 from spicepy import Client
 
 client = Client('API_KEY')
-data = client.query('SELECT * FROM eth.recent_blocks LIMIT 10;', timeout=10*60)
+data = client.query('SELECT * FROM eth.recent_blocks LIMIT 10;', timeout=5*60)
 pd = data.read_pandas()
 ```
 
