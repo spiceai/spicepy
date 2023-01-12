@@ -42,12 +42,13 @@ FROM eth.blocks limit 2000
     assert total_rows == 2000
     assert num_batches > 1
 
+
 def test_timeout():
     client = get_test_client()
     query = """
-SELECT count(*)
-FROM eth.blocks
-WHERE number > 10000000 AND number < 10100000
+select address, topics[0], topics[1], topics[2], row_number() over (partition by address order by topics[0], topics[1], topics[2]) as r
+from eth.recent_logs
+order by address, r
     """
     try:
         _ = client.query(query, timeout=1)
@@ -55,6 +56,8 @@ WHERE number > 10000000 AND number < 10100000
     except TimeoutError:
         assert True
 
+
 if __name__ == "__main__":
     test_recent_blocks()
     test_streaming()
+    test_timeout()
