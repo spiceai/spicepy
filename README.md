@@ -24,7 +24,7 @@ Querying data is done through a `Client` object that initialize the connection w
 
 - **api_key** (string, required): API key to authenticate with the endpoint.
 - **url** (string, optional): URL of the endpoint to use (default: grpc+tls://flight.spiceai.io)
-- **tls_root_cert** (Path or string, optional): Path to the tls certificate to use for the secure connection (ommit for automatic detection by [certifi](https://github.com/certifi/python-certifi))
+- **tls_root_cert** (Path or string, optional): Path to the tls certificate to use for the secure connection (omit for automatic detection)
 
 Once a `Client` is obtained queries can be made using the `query()` function. The `query()` function has the following arguments:
 
