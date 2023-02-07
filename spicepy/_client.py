@@ -3,6 +3,7 @@ import platform
 from typing import Union
 import certifi
 
+
 def is_macos_arm64() -> bool:
     return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
 
