@@ -1,10 +1,7 @@
-import os
 from pathlib import Path
 import platform
-import ssl
-import tempfile
 from typing import Union
-from urllib.request import urlretrieve
+import certifi
 
 
 def is_macos_arm64() -> bool:
@@ -29,30 +26,20 @@ class Client:
         self,
         api_key: str,
         url: str = "grpc+tls://flight.spiceai.io",
-        tls_root_cert: Union[str, Path] = None,
+        tls_root_cert: Union[str, Path, None] = None,
     ):
-        cert_path = (
-            Path(Path.cwd().absolute().anchor) / "usr" / "share" / "grpc" / "roots.pem"
-        )
         if tls_root_cert is not None:
             tls_root_cert = (
                 tls_root_cert
                 if isinstance(tls_root_cert, Path)
                 else Path(tls_root_cert)
             )
-        self.root_cert = None
-        if not cert_path.exists():
-            env_name = "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"
-            if env_name not in os.environ or not Path(os.environ[env_name]).exists():
-                temp_cert_path = Path(tempfile.gettempdir()) / "isrgrootx1.pem"
-                if not Path(temp_cert_path).exists():
-                    ssl._create_default_https_context = ssl._create_unverified_context
-                    urlretrieve("https://letsencrypt.org/certs/isrgrootx1.pem", str(temp_cert_path))
-                with open(temp_cert_path, 'rb') as cert_file:
-                    self.root_cert = cert_file.read()
+        else:
+            tls_root_cert = Path(certifi.where())
 
+        with open(tls_root_cert, 'rb') as cert_file:
+            self._flight_client = flight.connect(url, tls_root_certs=cert_file.read())
         self._api_key = api_key
-        self._flight_client = flight.connect(url, tls_root_certs=self.root_cert)
         self._flight_options = flight.FlightCallOptions()
         self._authenticate()
 
