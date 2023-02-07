@@ -10,7 +10,7 @@ from setuptools import setup, find_packages
 def setup_package():
     setup(
         name="spicepy",
-        version="0.2.1",
+        version="0.2.2",
         maintainer="Spice AI, Inc.",
         maintainer_email="webmaster@spice.ai",
         author="Spice AI, Inc.",
