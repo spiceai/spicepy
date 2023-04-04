@@ -45,13 +45,7 @@ FROM eth.blocks limit 2000
 
 def test_timeout():
     client = get_test_client()
-    query = """
-select address, topics[0], topics[1], topics[2],
-row_number() over
-  (partition by address order by topics[0], topics[1], topics[2]) as r
-from eth.recent_logs
-order by address, r
-    """
+    query = """SELECT * FROM eth.logs ORDER BY block_number DESC"""
     try:
         _ = client.query(query, timeout=1)
         assert False
