@@ -1,9 +1,10 @@
-import threading
+import certifi
 from pathlib import Path
 import platform
+import threading
 from typing import Union
-import certifi
-from pyarrow._flight import FlightCallOptions, FlightClient, Ticket
+
+from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
 
 
 def is_macos_arm64() -> bool:
@@ -101,10 +102,10 @@ class _ArrowFlightCallThread(threading.Thread):
     def run(self):
         try:
             self.reader = self._flight_client.do_get(self._ticket, self._flight_options)
-        except BaseException as e:
-            self._exc = e
+        except BaseException as exc:  # pylint: disable=W0718
+            self._exc = exc
 
     def join(self, timeout=None):
-        super(_ArrowFlightCallThread, self).join(timeout)
+        super().join(timeout)
         if self._exc:
             raise self._exc
