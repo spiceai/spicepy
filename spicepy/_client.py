@@ -1,9 +1,9 @@
-import certifi
 from pathlib import Path
 import platform
 import threading
 from typing import Union
 
+import certifi
 from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
 
 
