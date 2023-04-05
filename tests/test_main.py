@@ -45,7 +45,15 @@ FROM eth.blocks limit 2000
 
 def test_timeout():
     client = get_test_client()
-    query = """SELECT * FROM eth.logs ORDER BY block_number DESC"""
+    query = """WITH random_block AS (
+    SELECT mod(cast(floor(random() * 1e9) AS numeric), latest_block.number) AS number
+        FROM (
+            SELECT max(number) AS number FROM eth.blocks
+        ) AS latest_block
+)
+SELECT number, "timestamp", hash, transaction_count, gas_used 
+FROM eth.blocks
+WHERE number = (SELECT number FROM random_block)"""
     try:
         _ = client.query(query, timeout=1)
         assert False
