@@ -54,7 +54,8 @@ class Client:
         self.flight_headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
         self.firecache_headers = [self._firecache_client.authenticate_basic_token("", self._api_key)]
         self._flight_options = flight.FlightCallOptions(headers=self.flight_headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
-        self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers,
+                                                           timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout", None)
@@ -77,7 +78,7 @@ class Client:
             raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
-    
+
     def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout", None)
 
@@ -111,7 +112,7 @@ class Client:
             thread.join(1)
 
         return thread.reader
-    
+
     def _threaded_firecache_do_get(self, ticket: Ticket):
         thread = _ArrowFlightCallThread(
             ticket=ticket,
