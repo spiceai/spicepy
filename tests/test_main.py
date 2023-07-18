@@ -8,14 +8,20 @@ def get_test_client():
     return Client(api_key)
 
 
-def test_recent_blocks():
+def test_flight_recent_blocks():
     client = get_test_client()
     data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10;")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
+def test_firecache_recent_blocks():
+    client = get_test_client()
+    data = client.fire_query("SELECT * FROM eth.recent_blocks LIMIT 10;")
+    pandas_data = data.read_pandas()
+    assert len(pandas_data) == 10
 
-def test_streaming():
+
+def test_flight_streaming():
     client = get_test_client()
     query = """
 SELECT number,
@@ -43,7 +49,31 @@ FROM eth.blocks limit 2000
     assert num_batches > 1
 
 
-def test_timeout():
+def test_firecache_streaming():
+    client = get_test_client()
+    query = """
+    SELECT * FROM eth.recent_transactions LIMIT 4000
+    """
+    reader = client.fire_query(query)
+
+    total_rows = 0
+    num_batches = 0
+    has_more = True
+    while has_more:
+        try:
+            flight_batch = reader.read_chunk()
+            record_batch = flight_batch.data
+            num_batches += 1
+            total_rows += record_batch.num_rows
+            assert len(record_batch.to_pandas()) == record_batch.num_rows
+        except StopIteration:
+            has_more = False
+
+    assert total_rows == 4000
+    assert num_batches > 1
+
+
+def test_flight_timeout():
     client = get_test_client()
     query = """SELECT block_number,
        TO_TIMESTAMP(block_timestamp) as block_timestamp,
@@ -53,7 +83,7 @@ def test_timeout():
        avg(gas_price / 1e9) AS avg_gas_price_in_gwei,
        avg(gas * (gas_price / 1e18)) AS avg_fee_in_eth
 FROM eth.transactions
-WHERE block_timestamp > UNIX_TIMESTAMP()-60*60*24*10 -- last 30 days
+WHERE block_timestamp > UNIX_TIMESTAMP()-60*60*24*90 -- last 90 days
 GROUP BY block_number, block_timestamp
 ORDER BY block_number DESC"""
     try:
@@ -62,8 +92,9 @@ ORDER BY block_number DESC"""
     except TimeoutError:
         assert True
 
-
 if __name__ == "__main__":
-    test_recent_blocks()
-    test_streaming()
-    test_timeout()
+    test_flight_recent_blocks()
+    test_firecache_recent_blocks()
+    test_flight_streaming()
+    test_firecache_streaming()
+    test_flight_timeout()

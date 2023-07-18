@@ -28,7 +28,8 @@ class Client:
     def __init__(
         self,
         api_key: str,
-        url: str = "grpc+tls://flight.spiceai.io",
+        flight_url: str = "grpc+tls://flight.spiceai.io",
+        firecache_url: str = "grpc+tls://firecache.spiceai.io",
         tls_root_cert: Union[str, Path, None] = None,
     ):
         if tls_root_cert is not None:
@@ -41,14 +42,19 @@ class Client:
             tls_root_cert = Path(certifi.where())
 
         with open(tls_root_cert, 'rb') as cert_file:
-            self._flight_client = flight.connect(url, tls_root_certs=cert_file.read())
-        self._api_key = api_key
-        self._flight_options = flight.FlightCallOptions()
-        self._authenticate()
+            certs = cert_file.read()
+            self._flight_client = flight.connect(flight_url, tls_root_certs=certs)
+            self._firecache_client = flight.connect(firecache_url, tls_root_certs=certs)
+            self._api_key = api_key
+            self._flight_options = flight.FlightCallOptions()
+            self._firecache_options = flight.FlightCallOptions()
+            self._authenticate()
 
     def _authenticate(self):
-        self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
-        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self.flight_headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
+        self.firecache_headers = [self._firecache_client.authenticate_basic_token("", self._api_key)]
+        self._flight_options = flight.FlightCallOptions(headers=self.flight_headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout", None)
@@ -56,7 +62,7 @@ class Client:
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
+            self._flight_options = flight.FlightCallOptions(headers=self.flight_headers, timeout=timeout)
 
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options
@@ -71,12 +77,46 @@ class Client:
             raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
+    
+    def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        timeout = kwargs.get("timeout", None)
+
+        if timeout is not None:
+            if not isinstance(timeout, int) or timeout <= 0:
+                raise ValueError("Timeout must be a positive integer")
+            self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers, timeout=timeout)
+
+        flight_info = self._firecache_client.get_flight_info(
+            flight.FlightDescriptor.for_command(query), self._firecache_options
+        )
+
+        try:
+            reader = self._threaded_firecache_do_get(ticket=flight_info.endpoints[0].ticket)
+        except flight.FlightUnauthenticatedError:
+            self._authenticate()
+            reader = self._threaded_firecache_do_get(ticket=flight_info.endpoints[0].ticket)
+        except flight.FlightTimedOutError as exc:
+            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
+
+        return reader
 
     def _threaded_flight_do_get(self, ticket: Ticket):
         thread = _ArrowFlightCallThread(
             ticket=ticket,
             flight_options=self._flight_options,
             flight_client=self._flight_client
+        )
+        thread.start()
+        while thread.is_alive():
+            thread.join(1)
+
+        return thread.reader
+    
+    def _threaded_firecache_do_get(self, ticket: Ticket):
+        thread = _ArrowFlightCallThread(
+            ticket=ticket,
+            flight_options=self._firecache_options,
+            flight_client=self._firecache_client
         )
         thread.start()
         while thread.is_alive():
