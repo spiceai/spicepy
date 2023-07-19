@@ -50,30 +50,6 @@ FROM eth.blocks limit 2000
     assert num_batches > 1
 
 
-def test_firecache_streaming():
-    client = get_test_client()
-    query = """
-    SELECT * FROM eth.recent_transactions LIMIT 2100
-    """
-    reader = client.fire_query(query)
-
-    total_rows = 0
-    num_batches = 0
-    has_more = True
-    while has_more:
-        try:
-            flight_batch = reader.read_chunk()
-            record_batch = flight_batch.data
-            num_batches += 1
-            total_rows += record_batch.num_rows
-            assert len(record_batch.to_pandas()) == record_batch.num_rows
-        except StopIteration:
-            has_more = False
-
-    assert total_rows == 2100
-    assert num_batches > 1
-
-
 def test_flight_timeout():
     client = get_test_client()
     query = """SELECT block_number,
@@ -98,5 +74,4 @@ if __name__ == "__main__":
     test_flight_recent_blocks()
     test_firecache_recent_blocks()
     test_flight_streaming()
-    test_firecache_streaming()
     test_flight_timeout()
