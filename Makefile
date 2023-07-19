@@ -8,7 +8,7 @@ test:
 
 .PHONY: apple-silicon-requirements
 apple-silicon-requirements:
-	conda install pyarrow=10 pandas
+	conda install pyarrow=12 pandas
 
 .PHONY: lint
 lint:
