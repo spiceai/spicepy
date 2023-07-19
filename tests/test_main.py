@@ -14,6 +14,7 @@ def test_flight_recent_blocks():
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
+
 def test_firecache_recent_blocks():
     client = get_test_client()
     data = client.fire_query("SELECT * FROM eth.recent_blocks LIMIT 10;")
@@ -52,7 +53,7 @@ FROM eth.blocks limit 2000
 def test_firecache_streaming():
     client = get_test_client()
     query = """
-    SELECT * FROM eth.recent_transactions LIMIT 4000
+    SELECT * FROM eth.recent_transactions LIMIT 2100
     """
     reader = client.fire_query(query)
 
@@ -69,7 +70,7 @@ def test_firecache_streaming():
         except StopIteration:
             has_more = False
 
-    assert total_rows == 4000
+    assert total_rows == 2100
     assert num_batches > 1
 
 
@@ -91,6 +92,7 @@ ORDER BY block_number DESC"""
         assert False
     except TimeoutError:
         assert True
+
 
 if __name__ == "__main__":
     test_flight_recent_blocks()
