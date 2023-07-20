@@ -57,55 +57,46 @@ class Client:
         self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers,
                                                            timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
-    def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+    # Create a generic query method, opt can be "flight" or "firequery"
+    def _option_query(self, opt: str, query: str, **kwargs) -> flight.FlightStreamReader:
+        opt_options = '_' + opt + '_options'
+        opt_headers = opt + '_headers'
+        opt_client = '_' + opt + '_client'
+
         timeout = kwargs.get("timeout", None)
 
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(headers=self.flight_headers, timeout=timeout)
+            setattr(self, opt_options,
+                    flight.FlightCallOptions(headers=getattr(self, opt_headers), timeout=timeout))
 
-        flight_info = self._flight_client.get_flight_info(
-            flight.FlightDescriptor.for_command(query), self._flight_options
+        flight_info = getattr(self, opt_client).get_flight_info(
+            flight.FlightDescriptor.for_command(query),
+            getattr(self, opt_options)
         )
 
         try:
-            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(opt, ticket=flight_info.endpoints[0].ticket)
         except flight.FlightUnauthenticatedError:
             self._authenticate()
-            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(opt, ticket=flight_info.endpoints[0].ticket)
         except flight.FlightTimedOutError as exc:
             raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
+
+    def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        return self._option_query('flight', query, **kwargs)
 
     def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
-        timeout = kwargs.get("timeout", None)
+        return self._option_query('firecache', query, **kwargs)
 
-        if timeout is not None:
-            if not isinstance(timeout, int) or timeout <= 0:
-                raise ValueError("Timeout must be a positive integer")
-            self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers, timeout=timeout)
-
-        flight_info = self._firecache_client.get_flight_info(
-            flight.FlightDescriptor.for_command(query), self._firecache_options
-        )
-
-        try:
-            reader = self._threaded_firecache_do_get(ticket=flight_info.endpoints[0].ticket)
-        except flight.FlightUnauthenticatedError:
-            self._authenticate()
-            reader = self._threaded_firecache_do_get(ticket=flight_info.endpoints[0].ticket)
-        except flight.FlightTimedOutError as exc:
-            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
-
-        return reader
-
-    def _threaded_flight_do_get(self, ticket: Ticket):
+    def _threaded_flight_do_get(self, opt: str, ticket: Ticket):
         thread = _ArrowFlightCallThread(
             ticket=ticket,
-            flight_options=self._flight_options,
-            flight_client=self._flight_client
+            flight_options=getattr(self, '_' + opt + '_options'),
+            flight_client=getattr(self, '_' + opt + '_client')
         )
         thread.start()
         while thread.is_alive():
