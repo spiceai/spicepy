@@ -10,7 +10,7 @@ from setuptools import setup, find_packages
 def setup_package():
     setup(
         name="spicepy",
-        version="0.2.2",
+        version="0.3.0",
         maintainer="Spice AI, Inc.",
         maintainer_email="webmaster@spice.ai",
         author="Spice AI, Inc.",
@@ -20,7 +20,7 @@ def setup_package():
         license="Apache 2.0",
         packages=["spicepy"],
         install_requires=["pyarrow", "pandas", "web3>=6.0.0b2"],
-        python_requires=">=3.7",
+        python_requires=">=3.10",
     )
 
 
