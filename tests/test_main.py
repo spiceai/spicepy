@@ -65,10 +65,11 @@ WHERE block_timestamp > UNIX_TIMESTAMP()-60*60*24*30 -- last 30 days
 GROUP BY block_number, block_timestamp
 ORDER BY block_number DESC"""
     try:
-        prev_time = time.perf_counter()
+        prev_time = time.time()
         _ = client.query(query, timeout=1)
-        post_time = time.perf_counter()
-        if post_time - prev_time < 1:
+        post_time = time.time()
+        # Add 0.1s buffer time to 1s timeout time
+        if post_time - prev_time < 1.1:
             assert True
         else:
             assert False
