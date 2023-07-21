@@ -13,6 +13,7 @@ pip install git+https://github.com/spiceai/spicepy
 ### Arrow Query
 
 **SQL Query**
+
 ```python
 from spicepy import Client
 
@@ -22,6 +23,7 @@ pd = data.read_pandas()
 ```
 
 **Firecache Query (Available if firecache is enabled)**
+
 ```python
 from spicepy import Client
 
