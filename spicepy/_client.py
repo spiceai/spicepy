@@ -24,12 +24,11 @@ except (ImportError, ModuleNotFoundError) as error:
 DEFAULT_QUERY_TIMEOUT_SECS = 10*60
 
 
-class Client:
+class SpiceFlight:
     def __init__(
         self,
+        grpc: str,
         api_key: str,
-        flight_url: str = "grpc+tls://flight.spiceai.io",
-        firecache_url: str = "grpc+tls://firecache.spiceai.io",
         tls_root_cert: Union[str, Path, None] = None,
     ):
         if tls_root_cert is not None:
@@ -42,79 +41,65 @@ class Client:
             tls_root_cert = Path(certifi.where())
 
         with open(tls_root_cert, 'rb') as cert_file:
-            certs = cert_file.read()
-            self._flight_client = flight.connect(flight_url, tls_root_certs=certs)
-            self._firecache_client = flight.connect(firecache_url, tls_root_certs=certs)
+            self._flight_client = flight.connect(grpc, tls_root_certs=cert_file.read())
             self._api_key = api_key
             self._flight_options = flight.FlightCallOptions()
-            self._firecache_options = flight.FlightCallOptions()
             self._authenticate()
 
     def _authenticate(self):
-        self.flight_headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
-        self.firecache_headers = [self._firecache_client.authenticate_basic_token("", self._api_key)]
-        self._flight_options = flight.FlightCallOptions(headers=self.flight_headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
-        self._firecache_options = flight.FlightCallOptions(headers=self.firecache_headers,
-                                                           timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
+        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
-    # Create a generic query method, opt can be "flight" or "firequery"
-    def _option_query(self, opt: str, query: str, **kwargs) -> flight.FlightStreamReader:
-        opt_options = '_' + opt + '_options'
-        opt_headers = opt + '_headers'
-        opt_client = '_' + opt + '_client'
-
+    def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout", None)
 
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            setattr(self, opt_options,
-                    flight.FlightCallOptions(headers=getattr(self, opt_headers), timeout=timeout))
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
 
-        flight_info = getattr(self, opt_client).get_flight_info(
-            flight.FlightDescriptor.for_command(query),
-            getattr(self, opt_options)
+        flight_info = self._flight_client.get_flight_info(
+            flight.FlightDescriptor.for_command(query), self._flight_options
         )
 
         try:
-            reader = self._threaded_flight_do_get(opt, ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
         except flight.FlightUnauthenticatedError:
             self._authenticate()
-            reader = self._threaded_flight_do_get(opt, ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
         except flight.FlightTimedOutError as exc:
             raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
 
+    def _threaded_flight_do_get(self, ticket: Ticket):
+        thread = _ArrowFlightCallThread(
+            ticket=ticket,
+            flight_options=self._flight_options,
+            flight_client=self._flight_client
+        )
+        thread.start()
+        while thread.is_alive():
+            thread.join(1)
+
+        return thread.reader
+
+
+class Client:
+    def __init__(
+        self,
+        api_key: str,
+        flight_url: str = "grpc+tls://flight.spiceai.io",
+        firecache_url: str = "grpc+tls://firecache.spiceai.io",
+    ):
+        self._flight = SpiceFlight(flight_url, api_key)
+        self._firecache = SpiceFlight(firecache_url, api_key)
+
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
-        return self._option_query('flight', query, **kwargs)
+        return self._flight.query(query, **kwargs)
 
     def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
-        return self._option_query('firecache', query, **kwargs)
-
-    def _threaded_flight_do_get(self, opt: str, ticket: Ticket):
-        thread = _ArrowFlightCallThread(
-            ticket=ticket,
-            flight_options=getattr(self, '_' + opt + '_options'),
-            flight_client=getattr(self, '_' + opt + '_client')
-        )
-        thread.start()
-        while thread.is_alive():
-            thread.join(1)
-
-        return thread.reader
-
-    def _threaded_firecache_do_get(self, ticket: Ticket):
-        thread = _ArrowFlightCallThread(
-            ticket=ticket,
-            flight_options=self._firecache_options,
-            flight_client=self._firecache_client
-        )
-        thread.start()
-        while thread.is_alive():
-            thread.join(1)
-
-        return thread.reader
+        return self._firecache.query(query, **kwargs)
 
 
 class _ArrowFlightCallThread(threading.Thread):
