@@ -11,7 +11,7 @@ pip install git+https://github.com/spiceai/spicepy
 ## Usage
 
 ### Arrow Query
-**Default SQL Query**
+**SQL Query**
 ```python
 from spicepy import Client
 
