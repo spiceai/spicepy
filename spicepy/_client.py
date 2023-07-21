@@ -24,11 +24,11 @@ except (ImportError, ModuleNotFoundError) as error:
 DEFAULT_QUERY_TIMEOUT_SECS = 10*60
 
 
-class Client:
+class SpiceFlight:
     def __init__(
         self,
+        grpc: str,
         api_key: str,
-        url: str = "grpc+tls://flight.spiceai.io",
         tls_root_cert: Union[str, Path, None] = None,
     ):
         if tls_root_cert is not None:
@@ -41,10 +41,10 @@ class Client:
             tls_root_cert = Path(certifi.where())
 
         with open(tls_root_cert, 'rb') as cert_file:
-            self._flight_client = flight.connect(url, tls_root_certs=cert_file.read())
-        self._api_key = api_key
-        self._flight_options = flight.FlightCallOptions()
-        self._authenticate()
+            self._flight_client = flight.connect(grpc, tls_root_certs=cert_file.read())
+            self._api_key = api_key
+            self._flight_options = flight.FlightCallOptions()
+            self._authenticate()
 
     def _authenticate(self):
         self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
@@ -83,6 +83,23 @@ class Client:
             thread.join(1)
 
         return thread.reader
+
+
+class Client:
+    def __init__(
+        self,
+        api_key: str,
+        flight_url: str = "grpc+tls://flight.spiceai.io",
+        firecache_url: str = "grpc+tls://firecache.spiceai.io",
+    ):
+        self._flight = SpiceFlight(flight_url, api_key)
+        self._firecache = SpiceFlight(firecache_url, api_key)
+
+    def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        return self._flight.query(query, **kwargs)
+
+    def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        return self._firecache.query(query, **kwargs)
 
 
 class _ArrowFlightCallThread(threading.Thread):
