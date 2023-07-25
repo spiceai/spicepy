@@ -11,7 +11,9 @@ pip install git+https://github.com/spiceai/spicepy
 ## Usage
 
 ### Arrow Query
-**Default SQL Query**
+
+**SQL Query**
+
 ```python
 from spicepy import Client
 
@@ -19,7 +21,9 @@ client = Client('API_KEY')
 data = client.query('SELECT * FROM eth.recent_blocks LIMIT 10;', timeout=5*60)
 pd = data.read_pandas()
 ```
+
 **Firecache Query (Available if firecache is enabled)**
+
 ```python
 from spicepy import Client
 

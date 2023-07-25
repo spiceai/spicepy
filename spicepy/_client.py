@@ -24,12 +24,10 @@ except (ImportError, ModuleNotFoundError) as error:
 DEFAULT_QUERY_TIMEOUT_SECS = 10*60
 
 
-class SpiceFlight:
+class _Cert:
     def __init__(
         self,
-        grpc: str,
-        api_key: str,
-        tls_root_cert: Union[str, Path, None] = None,
+        tls_root_cert,
     ):
         if tls_root_cert is not None:
             tls_root_cert = (
@@ -40,11 +38,24 @@ class SpiceFlight:
         else:
             tls_root_cert = Path(certifi.where())
 
+        self.tls_root_certs = self.read_cert(tls_root_cert)
+
+    def read_cert(self, tls_root_cert):
         with open(tls_root_cert, 'rb') as cert_file:
-            self._flight_client = flight.connect(grpc, tls_root_certs=cert_file.read())
-            self._api_key = api_key
-            self._flight_options = flight.FlightCallOptions()
-            self._authenticate()
+            return cert_file.read()
+
+
+class _SpiceFlight:
+    def __init__(
+        self,
+        grpc: str,
+        api_key: str,
+        tls_root_certs
+    ):
+        self._flight_client = flight.connect(grpc, tls_root_certs=tls_root_certs)
+        self._api_key = api_key
+        self._flight_options = flight.FlightCallOptions()
+        self._authenticate()
 
     def _authenticate(self):
         self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
@@ -91,9 +102,11 @@ class Client:
         api_key: str,
         flight_url: str = "grpc+tls://flight.spiceai.io",
         firecache_url: str = "grpc+tls://firecache.spiceai.io",
+        tls_root_cert: Union[str, Path, None] = None,
     ):
-        self._flight = SpiceFlight(flight_url, api_key)
-        self._firecache = SpiceFlight(firecache_url, api_key)
+        tls_root_certs = _Cert(tls_root_cert).tls_root_certs
+        self._flight = _SpiceFlight(flight_url, api_key, tls_root_certs)
+        self._firecache = _SpiceFlight(firecache_url, api_key, tls_root_certs)
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         return self._flight.query(query, **kwargs)
