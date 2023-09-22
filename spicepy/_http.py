@@ -6,96 +6,101 @@ from requests.adapters import HTTPAdapter, Retry
 
 from .error import SpiceAIError
 
-HTTP_METHOD = Literal['POST', 'GET', 'PUT', 'HEAD', 'POST']
+HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
+
 
 class HttpRequests:
-
     def __init__(self, base_url: str, headers: Dict[str, str]) -> None:
         self.session = self._create_session(headers)
         self.base_url = base_url
 
     def send_request(
         self,
-        method: HTTP_METHOD,
+        method: HttpMethod,
         path: str,
-        param: Dict[str, Any] = {},
+        param: Optional[Dict[str, Any]] = None,
         body: Optional[Union[Any, bytes, str]] = None,
     ) -> Any:
-        
         if not isinstance(body, (bytes, str)) and body is not None:
             body = json.dumps(body)
 
         response: Response = self._operation(method)(
             url=f"{self.base_url}{path}",
             data=body,
-            params=self.prepare_param(param.copy()),
-            verify=True
+            params=self.prepare_param(param.copy()) if param is not None else param,
+            verify=True,
         )
         response.raise_for_status()
         return response.json()
 
-    def prepare_param(self, p: Dict[str, Any]) -> Dict[str, Any]:
-        for k, v in p.items():
-            match type(v):
+    def prepare_param(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        for k, val in params.items():
+            match type(val):
                 case datetime.timedelta:
-                    p[k] = timedelta_to_duration_str(v)
+                    params[k] = timedelta_to_duration_str(val)
                 case datetime.datetime:
-                    p[k] = int(v.timestamp())
-        return p
+                    params[k] = int(val.timestamp())
+        return params
 
-    def _operation(self, method: HTTP_METHOD) -> Callable[[], Response]:
+    def _operation(self, method: HttpMethod) -> Callable[[], Response]:
         _call = None
         match method:
-            case 'GET':
+            case "GET":
                 _call = self.session.get
-            case 'POST':
+            case "POST":
                 _call = self.session.post
-            case 'PUT':
+            case "PUT":
                 _call = self.session.put
-            case 'HEAD':
+            case "HEAD":
                 _call = self.session.head
-            case 'POST':
+            case "POST":
                 _call = self.session.post
-            case 'DELETE':
+            case "DELETE":
                 _call = self.session.delete
             case _:
-                raise SpiceAIError(f"{method} is not a valid HTTP operation")  
+                raise SpiceAIError(f"{method} is not a valid HTTP operation")
         return _call
 
     def _create_session(self, headers: Dict[str, str]) -> Session:
-        s = Session()
-        s.headers = headers
-        s.mount("https://", HTTPAdapter(max_retries=Retry(
-            total=5,
-            backoff_factor=2,
-            # Only retry 500s on GET so we don't unintionally mutute data
-            allowed_methods=["GET"],
-            # https://support.cloudflare.com/hc/en-us/articles/115003011431-Troubleshooting-Cloudflare-5XX-errors
-            status_forcelist=[
-                429,
-                500,
-                502,
-                503,
-                504,
-                520,
-                521,
-                522,
-                523,
-                524,
-                526,
-                527,
-            ],
-        )))
-        return s
+        sess = Session()
+        sess.headers = headers
+        sess.mount(
+            "https://",
+            HTTPAdapter(
+                max_retries=Retry(
+                    total=5,
+                    backoff_factor=2,
+                    # Only retry 500s on GET so we don't unintionally mutute data
+                    allowed_methods=["GET"],
+                    # https://support.cloudflare.com/hc/en-us/articles/115003011431-Troubleshooting-Cloudflare-5XX-errors
+                    status_forcelist=[
+                        429,
+                        500,
+                        502,
+                        503,
+                        504,
+                        520,
+                        521,
+                        522,
+                        523,
+                        524,
+                        526,
+                        527,
+                    ],
+                )
+            ),
+        )
+        return sess
+
 
 def timedelta_to_duration_str(delta: datetime.timedelta) -> str:
     total_seconds = delta.total_seconds()
-    
+
     days = delta.days
     hours, remainder = divmod(total_seconds, 3600)
     hours %= 24
     minutes, seconds = divmod(remainder, 60)
-    
+
     # Build the Go-like duration string
     parts = []
     if days:
@@ -106,5 +111,5 @@ def timedelta_to_duration_str(delta: datetime.timedelta) -> str:
         parts.append(f"{int(minutes)}m")
     if seconds:
         parts.append(f"{int(seconds)}s")
-    
+
     return "".join(parts) if parts else "0s"

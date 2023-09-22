@@ -2,9 +2,7 @@ import os
 from pathlib import Path
 import platform
 import threading
-from typing import Any, Callable, Dict, Literal, Union
-from requests import Session
-from requests.adapters import HTTPAdapter, Retry
+from typing import Dict, Union
 
 import certifi
 from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
@@ -14,7 +12,11 @@ from .error import SpiceAIError
 
 
 def is_macos_arm64() -> bool:
-    return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
+    return (
+        platform.platform().lower().startswith("macos")
+        and platform.machine() == "arm64"
+    )
+
 
 try:
     from pyarrow import flight
@@ -23,10 +25,11 @@ except (ImportError, ModuleNotFoundError) as error:
         raise ImportError(
             "Failed to import pyarrow. Detected Apple M1 system."
             " Installation of pyarrow on Apple M1 systems requires additional steps."
-            " See https://docs.spice.xyz/sdks/python-sdk#m1-macs.") from error
+            " See https://docs.spice.xyz/sdks/python-sdk#m1-macs."
+        ) from error
     raise error from error
 
-DEFAULT_QUERY_TIMEOUT_SECS = 10*60
+DEFAULT_QUERY_TIMEOUT_SECS = 10 * 60
 
 
 class _Cert:
@@ -46,17 +49,12 @@ class _Cert:
         self.tls_root_certs = self.read_cert(tls_root_cert)
 
     def read_cert(self, tls_root_cert):
-        with open(tls_root_cert, 'rb') as cert_file:
+        with open(tls_root_cert, "rb") as cert_file:
             return cert_file.read()
 
 
 class _SpiceFlight:
-    def __init__(
-        self,
-        grpc: str,
-        api_key: str,
-        tls_root_certs
-    ):
+    def __init__(self, grpc: str, api_key: str, tls_root_certs):
         self._flight_client = flight.connect(grpc, tls_root_certs=tls_root_certs)
         self._api_key = api_key
         self._flight_options = flight.FlightCallOptions()
@@ -64,7 +62,9 @@ class _SpiceFlight:
 
     def _authenticate(self):
         self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
-        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self._flight_options = flight.FlightCallOptions(
+            headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+        )
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout", None)
@@ -72,19 +72,27 @@ class _SpiceFlight:
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
+            self._flight_options = flight.FlightCallOptions(
+                headers=self.headers, timeout=timeout
+            )
 
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options
         )
 
         try:
-            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(
+                ticket=flight_info.endpoints[0].ticket
+            )
         except flight.FlightUnauthenticatedError:
             self._authenticate()
-            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(
+                ticket=flight_info.endpoints[0].ticket
+            )
         except flight.FlightTimedOutError as exc:
-            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
+            raise TimeoutError(
+                f"Query timed out and was canceled after {timeout} seconds."
+            ) from exc
 
         return reader
 
@@ -92,7 +100,7 @@ class _SpiceFlight:
         thread = _ArrowFlightCallThread(
             ticket=ticket,
             flight_options=self._flight_options,
-            flight_client=self._flight_client
+            flight_client=self._flight_client,
         )
         thread.start()
         while thread.is_alive():
@@ -109,7 +117,7 @@ class Client:
         firecache_url: str = "grpc+tls://firecache.spiceai.io",
         http_url: str = "https://data.spiceai.io",
         tls_root_cert: Union[str, Path, None] = None,
-    ):
+    ):  # pylint: disable=R0913
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
         self._flight = _SpiceFlight(flight_url, api_key, tls_root_certs)
         self._firecache = _SpiceFlight(firecache_url, api_key, tls_root_certs)
@@ -121,7 +129,7 @@ class Client:
         return {
             "X-API-Key": self._api_key(),
             "Accept": "application/json",
-            "User-Agent": f"spicepy 0.1",
+            "User-Agent": "spicepy 0.1",
         }
 
     def _api_key(self) -> str:
@@ -130,8 +138,8 @@ class Client:
             key = os.environ.get("SPICEAI_API_KEY")
         if not key:
             raise SpiceAIError(
-                """No API key provided. You need to set the SPICEAI_API_KEY environment variable or create a client with `spicepy.Client('API_KEY')`.
-You can find your API key on at https://spice.xyz."""
+                "No API key provided. You need to set the SPICEAI_API_KEY environment variable or create a client "
+                "with `spicepy.Client('API_KEY')`. You can find your API key on at https://spice.xyz."
             )
         return key
 
@@ -145,12 +153,13 @@ You can find your API key on at https://spice.xyz."""
     def prices(self) -> PriceCollection:
         return PriceCollection(client=self.http)
 
+
 class _ArrowFlightCallThread(threading.Thread):
     def __init__(
-            self,
-            flight_client: FlightClient,
-            ticket: Ticket,
-            flight_options: FlightCallOptions
+        self,
+        flight_client: FlightClient,
+        ticket: Ticket,
+        flight_options: FlightCallOptions,
     ):
         super().__init__()
         self._exc = None
