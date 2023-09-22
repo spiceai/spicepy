@@ -35,30 +35,25 @@ class HttpRequests:
 
     def prepare_param(self, params: Dict[str, Any]) -> Dict[str, Any]:
         for k, val in params.items():
-            match type(val):
-                case datetime.timedelta:
-                    params[k] = timedelta_to_duration_str(val)
-                case datetime.datetime:
-                    params[k] = int(val.timestamp())
+            if isinstance(val, datetime.timedelta):
+                params[k] = timedelta_to_duration_str(val)
+            elif isinstance(val, datetime.datetime):
+                params[k] = int(val.timestamp())
         return params
 
     def _operation(self, method: HttpMethod) -> Callable[[], Response]:
-        _call = None
-        match method:
-            case "GET":
-                _call = self.session.get
-            case "POST":
-                _call = self.session.post
-            case "PUT":
-                _call = self.session.put
-            case "HEAD":
-                _call = self.session.head
-            case "POST":
-                _call = self.session.post
-            case "DELETE":
-                _call = self.session.delete
-            case _:
-                raise SpiceAIError(f"{method} is not a valid HTTP operation")
+        if method == "GET":
+            _call = self.session.get
+        elif method == "POST":
+            _call = self.session.post
+        elif method == "PUT":
+            _call = self.session.put
+        elif method == "HEAD":
+            _call = self.session.head
+        elif method == "DELETE":
+            _call = self.session.delete
+        else:
+            raise SpiceAIError(f"{method} is not a valid HTTP operation")
         return _call
 
     def _create_session(self, headers: Dict[str, str]) -> Session:

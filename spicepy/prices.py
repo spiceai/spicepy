@@ -27,7 +27,7 @@ class Quote:
 
         _dict["prices"] = {key: float(value) for key, value in _dict.get("prices", {}).items()}
 
-        return Quote(**{k: v for k, v in _dict.items() if k in Quote.__annotations__})
+        return Quote(**{k: v for k, v in _dict.items() if k in Quote.__annotations__})  # pylint: disable=E1101
 
 
 @dataclass
