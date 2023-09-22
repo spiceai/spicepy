@@ -40,8 +40,7 @@ class HttpRequests:
                 case datetime.timedelta:
                     p[k] = timedelta_to_duration_str(v)
                 case datetime.datetime:
-                    p[k] = v.timestamp()
-
+                    p[k] = int(v.timestamp())
         return p
 
     def _operation(self, method: HTTP_METHOD) -> Callable[[], Response]:
