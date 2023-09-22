@@ -1,15 +1,20 @@
+import os
 from pathlib import Path
 import platform
 import threading
-from typing import Union
+from typing import Any, Callable, Dict, Literal, Union
+from requests import Session
+from requests.adapters import HTTPAdapter, Retry
 
 import certifi
 from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
+from .prices import PriceCollection
+from ._http import HttpRequests
+from .error import SpiceAIError
 
 
 def is_macos_arm64() -> bool:
     return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
-
 
 try:
     from pyarrow import flight
@@ -102,11 +107,33 @@ class Client:
         api_key: str,
         flight_url: str = "grpc+tls://flight.spiceai.io",
         firecache_url: str = "grpc+tls://firecache.spiceai.io",
+        http_url: str = "https://data.spiceai.io",
         tls_root_cert: Union[str, Path, None] = None,
     ):
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
         self._flight = _SpiceFlight(flight_url, api_key, tls_root_certs)
         self._firecache = _SpiceFlight(firecache_url, api_key, tls_root_certs)
+
+        self.api_key = api_key
+        self.http = HttpRequests(http_url, self._headers())
+
+    def _headers(self) -> Dict[str, str]:
+        return {
+            "X-API-Key": self._api_key(),
+            "Accept": "application/json",
+            "User-Agent": f"spicepy 0.1",
+        }
+
+    def _api_key(self) -> str:
+        key = self.api_key
+        if key is None:
+            key = os.environ.get("SPICEAI_API_KEY")
+        if not key:
+            raise SpiceAIError(
+                """No API key provided. You need to set the SPICEAI_API_KEY environment variable or create a client with `spicepy.Client('API_KEY')`.
+You can find your API key on at https://spice.xyz."""
+            )
+        return key
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         return self._flight.query(query, **kwargs)
@@ -114,6 +141,9 @@ class Client:
     def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         return self._firecache.query(query, **kwargs)
 
+    @property
+    def prices(self) -> PriceCollection:
+        return PriceCollection(client=self.http)
 
 class _ArrowFlightCallThread(threading.Thread):
     def __init__(
