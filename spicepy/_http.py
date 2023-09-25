@@ -6,8 +6,8 @@ from requests.adapters import HTTPAdapter, Retry
 
 from .error import SpiceAIError
 
-HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
-
+# Literal not supported in python 3.7
+HttpMethod = Union[str("POST"), str("GET"), str("PUT"), str("HEAD"), str("DELETE")]
 
 class HttpRequests:
     def __init__(self, base_url: str, headers: Dict[str, str]) -> None:
