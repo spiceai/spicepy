@@ -11,6 +11,7 @@ from ._http import HttpRequests
 from .error import SpiceAIError
 from . import config
 
+
 def is_macos_arm64() -> bool:
     return (
         platform.platform().lower().startswith("macos")
