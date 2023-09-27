@@ -9,7 +9,7 @@ from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: d
 from .prices import PriceCollection
 from ._http import HttpRequests
 from .error import SpiceAIError
-
+from . import config
 
 def is_macos_arm64() -> bool:
     return (
@@ -113,9 +113,9 @@ class Client:
     def __init__(
         self,
         api_key: str,
-        flight_url: str = "grpc+tls://flight.spiceai.io",
-        firecache_url: str = "grpc+tls://firecache.spiceai.io",
-        http_url: str = "https://data.spiceai.io",
+        flight_url: str = config.DEFAULT_FLIGHT_URL,
+        firecache_url: str = config.DEFAULT_FIRECACHE_URL,
+        http_url: str = config.DEFAULT_HTTP_URL,
         tls_root_cert: Union[str, Path, None] = None,
     ):  # pylint: disable=R0913
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
@@ -129,16 +129,16 @@ class Client:
         return {
             "X-API-Key": self._api_key(),
             "Accept": "application/json",
-            "User-Agent": "spicepy 0.1",
+            "User-Agent": "spicepy 1.0",
         }
 
     def _api_key(self) -> str:
         key = self.api_key
         if key is None:
-            key = os.environ.get("SPICEAI_API_KEY")
+            key = os.environ.get("SPICE_API_KEY")
         if not key:
             raise SpiceAIError(
-                "No API key provided. You need to set the SPICEAI_API_KEY environment variable or create a client "
+                "No API key provided. You need to set the SPICE_API_KEY environment variable or create a client "
                 "with `spicepy.Client('API_KEY')`. You can find your API key on at https://spice.xyz."
             )
         return key

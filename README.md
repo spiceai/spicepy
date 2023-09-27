@@ -49,7 +49,7 @@ A custom timeout can be set by passing the `timeout` parameter in the `query` fu
 #### Prices
 Get the latest price for a token pair.
 ```python
->>> data = client.prices.get_latest("BTC-USDC")
+>>> client.prices.get_latest("BTC-USDC")
 {'BTC-USDC': Quote(pair=None,
                    prices={'binance': 26639.37},
                    min_price=26639.37,
@@ -59,7 +59,7 @@ Get the latest price for a token pair.
 
 Get historical data 
 ```python
->>> data = client.prices.get("BTC-USDC")
+>>> client.prices.get("BTC-USDC")
 {'BTC-USDC': [Price(timestamp=datetime.datetime(2023, 9, 22, 4, 20, tzinfo=datetime.timezone.utc),
                     price=26642.77,
                     high=26642.77,
@@ -82,7 +82,7 @@ Get historical data
 
 Support for multiple pairs and configurable time periods
 ```python
->>> data = client.prices.get(["BTC-USDC", "ETH-BTC"],
+>>> client.prices.get(["BTC-USDC", "ETH-BTC"],
     start=datetime.now() - timedelta(days=7),
     end=datetime.now() - timedelta(days=6),
     granularity=timedelta(hours=12)
