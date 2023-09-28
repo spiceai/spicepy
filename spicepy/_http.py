@@ -1,18 +1,13 @@
 import datetime
 import json
-from typing import Any, Callable, Dict, NewType, Optional, Union
+from typing import Any, Callable, Dict, Literal, Optional, Union
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
 from .error import SpiceAIError
 
-# Literal not supported in python 3.7
-POST = NewType("POST", str)
-GET = NewType("GET", str)
-PUT = NewType("PUT", str)
-HEAD = NewType("HEAD", str)
-DELETE = NewType("DELETE", str)
-HttpMethod = Union[POST, GET, PUT, HEAD, DELETE]
+
+HTTP_METHOD = Literal['POST', 'GET', 'PUT', 'HEAD', 'POST']
 
 
 class HttpRequests:
@@ -22,7 +17,7 @@ class HttpRequests:
 
     def send_request(
         self,
-        method: HttpMethod,
+        method: HTTP_METHOD,
         path: str,
         param: Optional[Dict[str, Any]] = None,
         body: Optional[Union[Any, bytes, str]] = None,
@@ -47,7 +42,7 @@ class HttpRequests:
                 params[k] = int(val.timestamp())
         return params
 
-    def _operation(self, method: HttpMethod) -> Callable[[], Response]:
+    def _operation(self, method: HTTP_METHOD) -> Callable[[], Response]:
         if method == "GET":
             _call = self.session.get
         elif method == "POST":
