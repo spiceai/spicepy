@@ -7,7 +7,7 @@ from requests.adapters import HTTPAdapter, Retry
 from .error import SpiceAIError
 
 
-HTTP_METHOD = Literal['POST', 'GET', 'PUT', 'HEAD', 'POST']
+HttpMethod = Literal['POST', 'GET', 'PUT', 'HEAD', 'POST']
 
 
 class HttpRequests:
@@ -17,7 +17,7 @@ class HttpRequests:
 
     def send_request(
         self,
-        method: HTTP_METHOD,
+        method: HttpMethod,
         path: str,
         param: Optional[Dict[str, Any]] = None,
         body: Optional[Union[Any, bytes, str]] = None,
@@ -42,7 +42,7 @@ class HttpRequests:
                 params[k] = int(val.timestamp())
         return params
 
-    def _operation(self, method: HTTP_METHOD) -> Callable[[], Response]:
+    def _operation(self, method: HttpMethod) -> Callable[[], Response]:
         if method == "GET":
             _call = self.session.get
         elif method == "POST":
