@@ -15,7 +15,7 @@ def parse_requirements(filename: str) -> str:
     requirements = [req.strip() for req in requirements if req.strip() and not req.startswith('#')]
     return requirements
 
-def parse_mardown(path: str) -> str:
+def parse_markdown(path: str) -> str:
     with open(path, "r", encoding="utf8") as fh:
         return fh.read()
 
@@ -41,7 +41,7 @@ def setup_package():
             "Topic :: Software Development :: Libraries",
         ],
         keywords="spice, AI, web3, data, ML",
-        long_description=parse_mardown("README.md"),
+        long_description=parse_markdown("README.md"),
         long_description_content_type="text/markdown",
         packages=["spicepy"],
         install_requires=parse_requirements('requirements.txt'),
