@@ -19,14 +19,15 @@ jobs:
         python-version: ['3.8', '3.9', '3.10', '3.11']
     name: Test with pip install ${{ matrix.python-version }}
     steps:
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run pip install git+https://github.com/spiceai/spicepy
+      - name: Run pip install
         run: |
-          pip install git+https://github.com/spiceai/spicepy
+          pip install .
 
   pytest:
     runs-on: ${{ matrix.os }}
