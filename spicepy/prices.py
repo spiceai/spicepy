@@ -58,7 +58,7 @@ class PriceCollection:
             pairs = [pairs]
 
         resp = self.client.send_request(
-            "GET", "/v1/prices/latest", param={"pair": pairs}
+            "GET", "/v1/prices", param={"pair": pairs}
         )
         return {pair: Quote.from_dict(q) for (pair, q) in resp.items()}
 
@@ -77,7 +77,7 @@ class PriceCollection:
 
         resp = self.client.send_request(
             "GET",
-            "/v1/prices",
+            "/v1/prices/historical",
             param={
                 "pair": pairs,
                 "start": start,
