@@ -26,7 +26,7 @@ except (ImportError, ModuleNotFoundError) as error:
         raise ImportError(
             "Failed to import pyarrow. Detected Apple M1 system."
             " Installation of pyarrow on Apple M1 systems requires additional steps."
-            " See https://docs.spice.xyz/sdks/python-sdk#m1-macs."
+            " See https://docs.spice.ai/sdks/python-sdk#m1-macs."
         ) from error
     raise error from error
 
@@ -140,7 +140,7 @@ class Client:
         if not key:
             raise SpiceAIError(
                 "No API key provided. You need to set the SPICE_API_KEY environment variable or create a client "
-                "with `spicepy.Client('API_KEY')`. You can find your API key on at https://spice.xyz."
+                "with `spicepy.Client('API_KEY')`. You can find your API key on at https://spice.ai."
             )
         return key
 

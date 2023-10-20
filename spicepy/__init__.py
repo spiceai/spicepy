@@ -1,7 +1,7 @@
 """
 spicepy
 =====
-Spice.xyz client library.
+Spice.ai client library.
 """
 
 # flake8: noqa
