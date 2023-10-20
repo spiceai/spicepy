@@ -1,6 +1,6 @@
 # spicepy
 
-Spice.xyz client library for Python.
+Spice.ai client library for Python.
 
 ## Installation
 
@@ -116,4 +116,4 @@ Support for multiple pairs and configurable time periods
 
 ## Documentation
 
-Check out our [Documentation](https://docs.spice.xyz/sdks/python-sdk) to learn more about how to use the Python SDK.
+Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.

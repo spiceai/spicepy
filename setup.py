@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""spicepy is the Spice.xyz client library.
+"""spicepy is the Spice.ai client library.
 
 """
 
@@ -28,7 +28,7 @@ def setup_package():
         author="Spice AI, Inc.",
         author_email="webmaster@spice.ai",
         url="https://github.com/spiceai/spicepy",
-        description="Spice.xyz client library - data and AI infrastructure for web3.",
+        description="Spice.ai client library - data and AI infrastructure for web3.",
         license="Apache 2.0",
         classifiers=[
             "Development Status :: 4 - Beta",

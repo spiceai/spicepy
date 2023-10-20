@@ -35,5 +35,5 @@ To develop locally:
 5. Run the tests with:
 
    ```
-   API_KEY="<Spice.xyz API Key>" make test
+   API_KEY="<Spice.ai API Key>" make test
    ```
