@@ -5,7 +5,7 @@ Spice.ai client library for Python.
 ## Installation
 
 ```bash
-pip install git+https://github.com/spiceai/spicepy@v1.0.0
+pip install git+https://github.com/spiceai/spicepy@v1.0.1
 ```
 
 ## Usage
