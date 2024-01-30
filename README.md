@@ -114,6 +114,67 @@ Support for multiple pairs and configurable time periods
 
 ```
 
+#### AI Models
+Spicepy supports running prediction against your own trained models.
+```python
+>>> client.models.predict(cid=my_cid)
+Prediction(now=19122451,
+      lookback=[
+            Point(timestamp=19122442,
+                  value=20.689821537,
+                  covariate=55),
+            Point(timestamp=19122443,
+                  value=18.707675599,
+                  covariate=149),
+            Point(timestamp=19122444,
+                  value=17.992664808,
+                  covariate=264),
+            Point(timestamp=19122445,
+                  value=19.648576381,
+                  covariate=11),
+            Point(timestamp=19122446,
+                  value=17.420299285,
+                  covariate=136),
+            Point(timestamp=19122447,
+                  value=16.075633207,
+                  covariate=369),
+            Point(timestamp=19122448,
+                  value=18.082861418,
+                  covariate=234),
+            Point(timestamp=19122449,
+                  value=19.851269726,
+                  covariate=121),
+            Point(timestamp=19122450,
+                  value=20.570846326,
+                  covariate=72),
+            Point(timestamp=19122451,
+                  value=20.787251115,
+                  covariate=255)
+      ],
+      forecast=[
+            Point(timestamp=19122451,
+                  value=10.867426872253418,
+                  covariate=None)
+      ]
+)
+```
+And out of the box support for `pandas`.
+```python
+>>> client.models.predict(cid=my_cid, to_dataframe=True)
+    timestamp      value  covariate
+0    19122420  22.230395      119.0
+1    19122421  21.227253      201.0
+2    19122422  21.579048      112.0
+3    19122423  20.766538      123.0
+4    19122424  20.623809      135.0
+5    19122425  22.092613      121.0
+6    19122426  21.859050       96.0
+7    19122427  20.265461      192.0
+8    19122428  20.609428      101.0
+9    19122429  23.008345      114.0
+10   19122429  10.818775        NaN
+```
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.

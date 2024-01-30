@@ -42,11 +42,6 @@ class Prediction:
         except KeyError:
             raise ValueError(f"Cannot create `Prediction` from dict={x}")
 
-@dataclass
-class PredictionResponse:
-    data: Prediction
-    duration_ms: int
-
 class ModelsCollection:
     def __init__(self, client: HttpRequests):
         self.client = client
@@ -75,7 +70,4 @@ class ModelsCollection:
             )
 
         else: 
-            return PredictionResponse(
-                data = Prediction.from_dict(resp["data"]),
-                duration_ms=resp["duration_ms"],
-            )
+            return Prediction.from_dict(resp["data"])
