@@ -7,6 +7,8 @@ from typing import Dict, Union
 import certifi
 from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
 from .prices import PriceCollection
+from .models import ModelsCollection
+
 from ._http import HttpRequests
 from .error import SpiceAIError
 from . import config
@@ -149,6 +151,10 @@ class Client:
 
     def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         return self._firecache.query(query, **kwargs)
+
+    @property
+    def models(self) -> ModelsCollection:
+        return ModelsCollection(client=self.http)
 
     @property
     def prices(self) -> PriceCollection:

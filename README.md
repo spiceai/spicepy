@@ -114,6 +114,30 @@ Support for multiple pairs and configurable time periods
 
 ```
 
+#### AI Models
+Spicepy supports running prediction against your own trained models.
+```python
+>>> client.models.predict(cid=my_cid, return_lookback_data=False)
+Prediction(now=19122471,
+           lookback=None,
+           forecast=[
+            Point(timestamp=19122471,
+                  value=10.867426872253418,
+                  covariate=None)
+            ]
+)
+```
+
+And out of the box support for `pandas`.
+```python
+>>> df = client.models.predict(cid=my_cid, to_dataframe=True)
+>>> print(df.head(n=3))
+    timestamp      value  covariate
+0    19122420  22.230395      119.0
+1    19122421  21.227253      201.0
+2    19122422  21.579048      112.0
+```
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.
