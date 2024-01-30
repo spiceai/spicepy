@@ -4,7 +4,7 @@
 """
 
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 def parse_requirements(filename: str) -> str:
     """Load requirements from a pip requirements file."""
