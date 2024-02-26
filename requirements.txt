@@ -1,4 +1,4 @@
 pyarrow==14.0.1
-pandas==2.0.3
+pandas==2.2.1
 certifi==2023.7.22
 requests==2.31.0
