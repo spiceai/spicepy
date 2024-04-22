@@ -1,6 +1,6 @@
-## Contributing to spicepy
+# Contributing to spicepy
 
-### Developing
+## Developing
 
 The development branch is `trunk`. This is the branch that all pull
 requests should be made against.
@@ -13,7 +13,7 @@ To develop locally:
 
 2. Create a new branch:
 
-   ```
+   ```bash
    git checkout -b MY_BRANCH_NAME
    ```
 
@@ -21,7 +21,7 @@ To develop locally:
 
 4. Install the dependencies with:
 
-   ```
+   ```bash
    # Run this command in the root of the repository
    pip install -e .
    ```
@@ -34,6 +34,6 @@ To develop locally:
 
 5. Run the tests with:
 
-   ```
+   ```bash
    API_KEY="<Spice.ai API Key>" make test
    ```
