@@ -160,7 +160,6 @@ class Client:
     def prices(self) -> PriceCollection:
         return PriceCollection(client=self.http)
 
-
 class _ArrowFlightCallThread(threading.Thread):
     def __init__(
         self,
