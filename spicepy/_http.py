@@ -66,7 +66,7 @@ class HttpRequests:
                 max_retries=Retry(
                     total=5,
                     backoff_factor=2,
-                    # Only retry 500s on GET so we don't unintionally mutate data
+                    # Only retry 500s on GET so we don't unintentionally mutate data
                     allowed_methods=["GET"],
                     # https://support.cloudflare.com/hc/en-us/articles/115003011431-Troubleshooting-Cloudflare-5XX-errors
                     status_forcelist=[
