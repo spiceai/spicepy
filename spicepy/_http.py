@@ -7,7 +7,7 @@ from requests.adapters import HTTPAdapter, Retry
 from .error import SpiceAIError
 
 
-HttpMethod = Literal['POST', 'GET', 'PUT', 'HEAD', 'POST']
+HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
 
 
 class HttpRequests:
