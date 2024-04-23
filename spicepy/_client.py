@@ -5,11 +5,7 @@ import threading
 from typing import Dict, Union
 
 import certifi
-from pyarrow._flight import (
-    FlightCallOptions,
-    FlightClient,
-    Ticket,
-) # pylint: disable=E0611
+from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
 
 from .models import ModelsCollection
 
