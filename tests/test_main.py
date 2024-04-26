@@ -81,11 +81,13 @@ ORDER BY block_number DESC"""
     except TimeoutError:
         assert True
 
+
 def test_local_runtime():
     client = get_local_client()
     data = client.query("SELECT * FROM taxi_trips LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
+
 
 if __name__ == "__main__":
     test_flight_recent_blocks()
