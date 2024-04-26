@@ -49,7 +49,20 @@ jobs:
 
       - name: install Spice
         if: matrix.os != 'windows-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          function curl() {
+            if [ -z "$GH_TOKEN" ]
+            then
+              command curl -H "Accept: application/vnd.github.v3.raw" \
+                $@
+            else
+              command curl -H "Accept: application/vnd.github.v3.raw" \
+                -H "Authorization: token $GH_TOKEN" \
+                $@
+            fi
+          }
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
 
@@ -65,6 +78,15 @@ jobs:
         shell: pwsh
 
       - name: Init and start spice app
+        if: matrix.os != 'windows-latest'
+        run: |
+          spice init spice_qs
+          cd spice_qs
+          spice add spiceai/quickstart
+          Start-Process -FilePath spice run
+
+      - name: Init and start spice app (Windows)
+        if: matrix.os == 'windows-latest'
         run: |
           spice init spice_qs
           cd spice_qs
@@ -72,6 +94,7 @@ jobs:
           spice run &> spice.log &
           # time to initialize added dataset
           sleep 10
+        shell: pwsh
 
       - name: Running tests
         env:
