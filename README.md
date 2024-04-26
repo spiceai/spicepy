@@ -12,7 +12,7 @@ pip install git+https://github.com/spiceai/spicepy@v1.0.1
 
 ### Arrow Query with local spice runtime
 
-Follow the [quiqstart guide](https://github.com/spiceai/spiceai?tab=readme-ov-file#%EF%B8%8F-quickstart-local-machine) to install and run spice locally
+Follow the [quickstart guide](https://github.com/spiceai/spiceai?tab=readme-ov-file#%EF%B8%8F-quickstart-local-machine) to install and run spice locally
 
 ```python
 from spicepy import Client
