@@ -6,8 +6,7 @@ from typing import Dict, Union
 
 import certifi
 from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
-from ._http import HttpRequests
-from .error import SpiceAIError
+from ._http import HttpRequestsSpiceAIError
 from . import config
 
 
