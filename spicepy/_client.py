@@ -129,7 +129,7 @@ class Client:
         return {
             "X-API-Key": self._api_key(),
             "Accept": "application/json",
-            "User-Agent": "spicepy 1.0",
+            "User-Agent": "spicepy 2.0",
         }
 
     def _api_key(self) -> str:
