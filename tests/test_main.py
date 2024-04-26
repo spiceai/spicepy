@@ -11,8 +11,10 @@ def get_cloud_client():
         flight_url="grpc+tls://flight.spiceai.io"
     )
 
+
 def get_local_client():
     return Client(flight_url="grpc://localhost:50051")
+
 
 def test_flight_recent_blocks():
     client = get_cloud_client()
