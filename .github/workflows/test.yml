@@ -92,7 +92,7 @@ jobs:
         run: |
           spice init spice_qs
           cd spice_qs
-          Start-Process -FilePath spice add spiceai/quickstart
+          spice add spiceai/quickstart
           Start-Process -FilePath spice run
         shell: pwsh
 
