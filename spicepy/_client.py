@@ -7,7 +7,6 @@ from typing import Dict, Union
 import certifi
 from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
 from ._http import HttpRequests
-from .error import SpiceAIError
 from . import config
 
 
@@ -61,10 +60,16 @@ class _SpiceFlight:
         self._authenticate()
 
     def _authenticate(self):
-        self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
-        self._flight_options = flight.FlightCallOptions(
-            headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-        )
+        if self._api_key is not None:
+            self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
+            self._flight_options = flight.FlightCallOptions(
+                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+            )
+        else:
+            self.headers = []
+            self._flight_options = flight.FlightCallOptions(
+                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+            )
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout", None)
@@ -112,8 +117,8 @@ class _SpiceFlight:
 class Client:
     def __init__(
         self,
-        api_key: str,
-        flight_url: str = config.DEFAULT_FLIGHT_URL,
+        api_key: str = None,
+        flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,
         firecache_url: str = config.DEFAULT_FIRECACHE_URL,
         http_url: str = config.DEFAULT_HTTP_URL,
         tls_root_cert: Union[str, Path, None] = None,
@@ -136,11 +141,6 @@ class Client:
         key = self.api_key
         if key is None:
             key = os.environ.get("SPICE_API_KEY")
-        if not key:
-            raise SpiceAIError(
-                "No API key provided. You need to set the SPICE_API_KEY environment variable or create a client "
-                "with `spicepy.Client('API_KEY')`. You can find your API key on at https://spice.ai."
-            )
         return key
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
