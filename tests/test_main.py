@@ -3,27 +3,34 @@ import time
 from spicepy import Client
 
 
-def get_test_client():
+def get_cloud_client():
     api_key = os.environ["API_KEY"]
-    return Client(api_key)
+    return Client(
+        api_key=api_key,
+        flight_url="grpc+tls://flight.spiceai.io"
+    )
+
+
+def get_local_client():
+    return Client(flight_url="grpc://localhost:50051")
 
 
 def test_flight_recent_blocks():
-    client = get_test_client()
+    client = get_cloud_client()
     data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
 
 def test_firecache_recent_blocks():
-    client = get_test_client()
+    client = get_cloud_client()
     data = client.fire_query("SELECT * FROM eth.recent_blocks LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
 
 def test_flight_streaming():
-    client = get_test_client()
+    client = get_cloud_client()
     query = """
 SELECT number,
        "timestamp",
@@ -51,7 +58,7 @@ FROM eth.blocks limit 2000
 
 
 def test_flight_timeout():
-    client = get_test_client()
+    client = get_cloud_client()
     query = """SELECT block_number,
        TO_TIMESTAMP(block_timestamp) as block_timestamp,
        avg(gas) as avg_gas_used,
@@ -76,8 +83,16 @@ ORDER BY block_number DESC"""
         assert True
 
 
+def test_local_runtime():
+    client = get_local_client()
+    data = client.query("SELECT * FROM taxi_trips LIMIT 10")
+    pandas_data = data.read_pandas()
+    assert len(pandas_data) == 10
+
+
 if __name__ == "__main__":
     test_flight_recent_blocks()
     test_firecache_recent_blocks()
     test_flight_streaming()
     test_flight_timeout()
+    test_local_runtime()
