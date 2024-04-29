@@ -4,10 +4,11 @@ import time
 import pytest
 from spicepy import Client
 
+
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
 def skip_cloud():
-    skip_cloud = os.environ.get("TEST_SPICE_CLOUD") != "true"
-    return pytest.mark.skipif(skip_cloud, reason="Cloud tests disabled")
+    skip = os.environ.get("TEST_SPICE_CLOUD") != "true"
+    return pytest.mark.skipif(skip, reason="Cloud tests disabled")
 
 
 def get_cloud_client():
