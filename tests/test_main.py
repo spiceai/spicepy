@@ -1,7 +1,13 @@
 
 import os
 import time
+import pytest
 from spicepy import Client
+
+# Skip cloud tests if TEST_SPICE_CLOUD is not set to true
+def skip_cloud():
+    skip_cloud = os.environ.get("TEST_SPICE_CLOUD") != "true"
+    return pytest.mark.skipif(skip_cloud, reason="Cloud tests disabled")
 
 
 def get_cloud_client():
@@ -16,6 +22,7 @@ def get_local_client():
     return Client(flight_url="grpc://localhost:50051")
 
 
+@skip_cloud()
 def test_flight_recent_blocks():
     client = get_cloud_client()
     data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10")
@@ -23,6 +30,7 @@ def test_flight_recent_blocks():
     assert len(pandas_data) == 10
 
 
+@skip_cloud()
 def test_firecache_recent_blocks():
     client = get_cloud_client()
     data = client.fire_query("SELECT * FROM eth.recent_blocks LIMIT 10")
@@ -30,6 +38,7 @@ def test_firecache_recent_blocks():
     assert len(pandas_data) == 10
 
 
+@skip_cloud()
 def test_flight_streaming():
     client = get_cloud_client()
     query = """
@@ -58,6 +67,7 @@ FROM eth.blocks limit 2000
     assert num_batches > 1
 
 
+@skip_cloud()
 def test_flight_timeout():
     client = get_cloud_client()
     query = """SELECT block_number,
