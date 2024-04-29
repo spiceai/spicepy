@@ -15,6 +15,7 @@ jobs:
   test_pip_install:
     runs-on: ubuntu-latest
     strategy:
+      max-parallel: 2
       matrix:
         python-version: ["3.11", "3.12"]
     name: Test with pip install ${{ matrix.python-version }}
@@ -94,6 +95,8 @@ jobs:
           cd spice_qs
           spice add spiceai/quickstart
           Start-Process -FilePath spice run
+          # time to initialize added dataset
+          Start-Sleep -Seconds 10
         shell: pwsh
 
       - name: Running tests
@@ -103,3 +106,11 @@ jobs:
           TEST_SPICE_CLOUD: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'}}
         run: |
           pytest -s
+
+      - name: Stop spice and check logs
+        working-directory: test_app
+        if: always()
+        run: |
+          sleep 10
+          killall spice
+          cat spice.log
