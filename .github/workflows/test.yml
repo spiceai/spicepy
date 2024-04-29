@@ -108,7 +108,7 @@ jobs:
           pytest -s
 
       - name: Stop spice and check logs
-        working-directory: test_app
+        working-directory: spice_qs
         if: always()
         run: |
           sleep 10
