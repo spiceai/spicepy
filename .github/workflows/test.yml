@@ -15,7 +15,7 @@ jobs:
   test_pip_install:
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         python-version: ["3.11", "3.12"]
     name: Test with pip install ${{ matrix.python-version }}
