@@ -21,7 +21,7 @@ def get_local_client():
 
 
 def test_user_agent_is_populated():
-    expected_platforms = ["x86", "x86_64", "aarch64", "arm64", "AMD64"]
+    expected_platforms = ["x86", "x86_64", "aarch64", "arm64"]
 
     assert SPICE_USER_AGENT.split(" ")[0] == "spicepy"
     assert SPICE_USER_AGENT.split(" ")[1] == "2.0.0"
