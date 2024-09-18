@@ -1,6 +1,6 @@
 import os
 import platform
-import pkg_resources
+from importlib.metadata import version
 
 DEFAULT_FLIGHT_URL = os.environ.get("SPICE_FLIGHT_URL", "grpc+tls://flight.spiceai.io")
 DEFAULT_FIRECACHE_URL = os.environ.get(
@@ -17,7 +17,7 @@ DEFAULT_LOCAL_HTTP_URL = os.environ.get(
 
 
 def get_user_agent():
-    package_version = pkg_resources.get_distribution("spicepy").version
+    package_version = version("spicepy")
     system = platform.system()
     release = platform.release()
     arch = platform.architecture()[0]
