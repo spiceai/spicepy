@@ -22,7 +22,7 @@ def get_user_agent():
     release = platform.release()
     arch = platform.architecture()[0]
     if arch == "32bit":  # expect a shorthand x32 or x64
-        arch = "x32"
+        arch = "x86_64"
     elif arch == "64bit":
         arch = "x64"
 
