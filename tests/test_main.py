@@ -23,7 +23,7 @@ def get_local_client():
 
 def test_user_agent_is_populated():
     # use a regex to match the expected user agent string
-    matching_regex = r"spicepy \d+\.\d+\.\d+ \((Linux|Windows|macOS)/[\d\w\.\-\_]+ (x86_64|aarch64|i386|arm64)\)"
+    matching_regex = r"spicepy \d+\.\d+\.\d+ \((Linux|Windows|Darwin)/[\d\w\.\-\_]+ (x86_64|aarch64|i386|arm64)\)"
 
     assert re.match(matching_regex, SPICE_USER_AGENT)
 
