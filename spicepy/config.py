@@ -20,11 +20,9 @@ def get_user_agent():
     package_version = version("spicepy")
     system = platform.system()
     release = platform.release()
-    arch = platform.architecture()[0]
-    if arch == "32bit":  # expect a shorthand x32 or x64
+    arch = platform.machine()
+    if arch == "i386":
         arch = "x86"
-    elif arch == "64bit":
-        arch = "x86_64"
 
     system_info = f"{system}/{release} {arch}"
     return f"spicepy {package_version} {system_info}"
