@@ -1,8 +1,8 @@
-
 import os
 import time
 import pytest
 from spicepy import Client
+from spicepy.config import SPICE_USER_AGENT
 
 
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
@@ -13,14 +13,19 @@ def skip_cloud():
 
 def get_cloud_client():
     api_key = os.environ["API_KEY"]
-    return Client(
-        api_key=api_key,
-        flight_url="grpc+tls://flight.spiceai.io"
-    )
+    return Client(api_key=api_key, flight_url="grpc+tls://flight.spiceai.io")
 
 
 def get_local_client():
     return Client(flight_url="grpc://localhost:50051")
+
+
+def test_user_agent_is_populated():
+    EXPECTED_PLATFORMS = ["x64", "x32"]
+
+    assert SPICE_USER_AGENT.split(" ")[0] == "spicepy"
+    assert SPICE_USER_AGENT.split(" ")[1] == "2.0.0"
+    assert SPICE_USER_AGENT.split(" ")[3][:3] in EXPECTED_PLATFORMS
 
 
 @skip_cloud()

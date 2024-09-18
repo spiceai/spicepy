@@ -5,7 +5,11 @@ import threading
 from typing import Dict, Union
 
 import certifi
-from pyarrow._flight import FlightCallOptions, FlightClient, Ticket  # pylint: disable=E0611
+from pyarrow._flight import (
+    FlightCallOptions,
+    FlightClient,
+    Ticket,
+)  # pylint: disable=E0611
 from ._http import HttpRequests
 from . import config
 
@@ -56,17 +60,21 @@ class _SpiceFlight:
     def __init__(self, grpc: str, api_key: str, tls_root_certs):
         self._flight_client = flight.connect(grpc, tls_root_certs=tls_root_certs)
         self._api_key = api_key
-        self._flight_options = flight.FlightCallOptions()
+        self.headers = [("x-spice-user-agent", config.SPICE_USER_AGENT)]
+        self._flight_options = flight.FlightCallOptions(headers=self.headers)
         self._authenticate()
 
     def _authenticate(self):
         if self._api_key is not None:
-            self.headers = [self._flight_client.authenticate_basic_token("", self._api_key)]
+            self.headers = [
+                self._flight_client.authenticate_basic_token("", self._api_key),
+                ("x-spice-user-agent", config.SPICE_USER_AGENT),
+            ]
             self._flight_options = flight.FlightCallOptions(
                 headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
             )
         else:
-            self.headers = []
+            self.headers = [("x-spice-user-agent", config.SPICE_USER_AGENT)]
             self._flight_options = flight.FlightCallOptions(
                 headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
             )
