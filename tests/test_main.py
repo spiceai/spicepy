@@ -1,5 +1,6 @@
 import os
 import time
+import re
 import pytest
 from spicepy import Client
 from spicepy.config import SPICE_USER_AGENT
@@ -21,13 +22,10 @@ def get_local_client():
 
 
 def test_user_agent_is_populated():
-    expected_platforms = ["x86", "x86_64", "aarch64", "arm64"]
+    # use a regex to match the expected user agent string
+    matching_regex = r"spicepy \d+\.\d+\.\d+ \((Linux|Windows|macOS)/[\d\w\.\-\_]+ (x86_64|aarch64|i386|arm64)\)"
 
-    assert SPICE_USER_AGENT.split(" ")[0] == "spicepy"
-    assert SPICE_USER_AGENT.split(" ")[1] == "2.0.0"
-
-    arch = SPICE_USER_AGENT.split(" ")[3].replace(")", "")
-    assert arch in expected_platforms
+    assert re.match(matching_regex, SPICE_USER_AGENT)
 
 
 @skip_cloud()

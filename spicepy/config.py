@@ -25,7 +25,7 @@ def get_user_agent():
         arch = "x86_64"
 
     system_info = f"{system}/{release} {arch}"
-    return f"spicepy {package_version} {system_info}"
+    return f"spicepy {package_version} ({system_info})"
 
 
 SPICE_USER_AGENT = get_user_agent()
