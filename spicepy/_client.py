@@ -5,11 +5,13 @@ import threading
 from typing import Dict, Union
 
 import certifi
+
+# pylint: disable=E0611
 from pyarrow._flight import (
     FlightCallOptions,
     FlightClient,
     Ticket,
-)  # pylint: disable=E0611
+)
 from ._http import HttpRequests
 from . import config
 

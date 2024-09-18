@@ -1,6 +1,6 @@
 import os
-import pkg_resources
 import platform
+import pkg_resources
 
 DEFAULT_FLIGHT_URL = os.environ.get("SPICE_FLIGHT_URL", "grpc+tls://flight.spiceai.io")
 DEFAULT_FIRECACHE_URL = os.environ.get(
@@ -26,8 +26,8 @@ def get_user_agent():
     elif arch == "64bit":
         arch = "x64"
 
-    system_info = "%s/%s %s" % (system, release, arch)
-    return "spicepy %s (%s)" % (package_version, system_info)
+    system_info = f"{system}/{release} {arch}"
+    return f"spicepy {package_version} {system_info}"
 
 
 SPICE_USER_AGENT = get_user_agent()

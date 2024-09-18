@@ -21,11 +21,11 @@ def get_local_client():
 
 
 def test_user_agent_is_populated():
-    EXPECTED_PLATFORMS = ["x64", "x32"]
+    expected_platforms = ["x64", "x32"]
 
     assert SPICE_USER_AGENT.split(" ")[0] == "spicepy"
     assert SPICE_USER_AGENT.split(" ")[1] == "2.0.0"
-    assert SPICE_USER_AGENT.split(" ")[3][:3] in EXPECTED_PLATFORMS
+    assert SPICE_USER_AGENT.split(" ")[3][:3] in expected_platforms
 
 
 @skip_cloud()
