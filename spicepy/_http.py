@@ -5,14 +5,19 @@ from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
 from .error import SpiceAIError
+from .config import SPICE_USER_AGENT
 
 
-HttpMethod = Literal['POST', 'GET', 'PUT', 'HEAD', 'POST']
+HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
 
 
 class HttpRequests:
     def __init__(self, base_url: str, headers: Dict[str, str]) -> None:
         self.session = self._create_session(headers)
+
+        # set the x-spice-user-agent header
+        self.session.headers["X-Spice-User-Agent"] = SPICE_USER_AGENT
+
         self.base_url = base_url
 
     def send_request(

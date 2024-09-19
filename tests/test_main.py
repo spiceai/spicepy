@@ -1,8 +1,9 @@
-
 import os
 import time
+import re
 import pytest
 from spicepy import Client
+from spicepy.config import SPICE_USER_AGENT
 
 
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
@@ -13,14 +14,18 @@ def skip_cloud():
 
 def get_cloud_client():
     api_key = os.environ["API_KEY"]
-    return Client(
-        api_key=api_key,
-        flight_url="grpc+tls://flight.spiceai.io"
-    )
+    return Client(api_key=api_key, flight_url="grpc+tls://flight.spiceai.io")
 
 
 def get_local_client():
     return Client(flight_url="grpc://localhost:50051")
+
+
+def test_user_agent_is_populated():
+    # use a regex to match the expected user agent string
+    matching_regex = r"spicepy \d+\.\d+\.\d+ \((Linux|Windows|Darwin)/[\d\w\.\-\_]+ (x86_64|aarch64|i386|arm64)\)"
+
+    assert re.match(matching_regex, SPICE_USER_AGENT)
 
 
 @skip_cloud()

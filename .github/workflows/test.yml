@@ -15,6 +15,7 @@ jobs:
   test_pip_install:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.11', '3.12']
     name: Test with pip install ${{ matrix.python-version }}
@@ -32,7 +33,7 @@ jobs:
   pytest:
     runs-on: ${{ matrix.os }}
     strategy:
-      max-parallel: 1
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.11', '3.12']
@@ -48,24 +49,20 @@ jobs:
         run: |
           pip install ".[test]"
 
-      - name: install Spice
-        if: matrix.os != 'windows-latest'
+      - name: Install Spice (https://install.spiceai.org) (Linux)
+        if: matrix.os == 'ubuntu-latest'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          function curl() {
-            if [ -z "$GH_TOKEN" ]
-            then
-              command curl -H "Accept: application/vnd.github.v3.raw" \
-                $@
-            else
-              command curl -H "Accept: application/vnd.github.v3.raw" \
-                -H "Authorization: token $GH_TOKEN" \
-                $@
-            fi
-          }
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
+          $HOME/.spice/bin/spice install
+      
+      - name: Install Spice (https://install.spiceai.org) (MacOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install spiceai/spiceai/spice
+          brew install spiceai/spiceai/spiced
 
       - name: install Spice (Windows)
         if: matrix.os == 'windows-latest'
@@ -84,7 +81,7 @@ jobs:
           spice init spice_qs
           cd spice_qs
           spice add spiceai/quickstart
-          spice run &> spice.log &
+          spiced &> spice.log &
           # time to initialize added dataset
           sleep 10
 
@@ -109,8 +106,7 @@ jobs:
 
       - name: Stop spice and check logs
         working-directory: spice_qs
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-latest' && always()
         run: |
-          sleep 10
-          killall spice
+          killall spice || true
           cat spice.log
