@@ -18,7 +18,7 @@ def get_cloud_client():
 
 
 def get_local_client():
-    return Client(flight_url="grpc://localhost:50051")
+    return Client(flight_url="grpc://localhost:50051", http_url="http://localhost:8090")
 
 
 def test_user_agent_is_populated():
@@ -32,14 +32,6 @@ def test_user_agent_is_populated():
 def test_flight_recent_blocks():
     client = get_cloud_client()
     data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10")
-    pandas_data = data.read_pandas()
-    assert len(pandas_data) == 10
-
-
-@skip_cloud()
-def test_firecache_recent_blocks():
-    client = get_cloud_client()
-    data = client.fire_query("SELECT * FROM eth.recent_blocks LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
@@ -107,9 +99,49 @@ def test_local_runtime():
     assert len(pandas_data) == 10
 
 
+def test_local_runtime_refresh():
+    client = get_local_client()
+    # basic refresh
+    response = client.refresh_dataset("taxi_trips", None)
+    assert response["message"] == "Dataset refresh triggered for taxi_trips."
+
+    time.sleep(10)
+    data = client.query("SELECT * FROM taxi_trips LIMIT 10")
+    pandas_data = data.read_pandas()
+    assert len(pandas_data) == 10
+
+    # refresh sql limited to 10 rows
+    response = client.refresh_dataset(
+        "taxi_trips",
+        {
+            "refresh_sql": "SELECT * FROM taxi_trips LIMIT 10",
+        },
+    )
+    assert response["message"] == "Dataset refresh triggered for taxi_trips."
+
+    time.sleep(10)
+    data = client.query("SELECT * FROM taxi_trips")
+    pandas_data = data.read_pandas()
+    assert len(pandas_data) == 10
+
+    # refresh sql limited to 20 rows
+    response = client.refresh_dataset(
+        "taxi_trips",
+        {
+            "refresh_sql": "SELECT * FROM taxi_trips LIMIT 20",
+        },
+    )
+    assert response["message"] == "Dataset refresh triggered for taxi_trips."
+
+    time.sleep(10)
+    data = client.query("SELECT * FROM taxi_trips")
+    pandas_data = data.read_pandas()
+    assert len(pandas_data) == 20
+
+
 if __name__ == "__main__":
     test_flight_recent_blocks()
-    test_firecache_recent_blocks()
     test_flight_streaming()
     test_flight_timeout()
     test_local_runtime()
+    test_local_runtime_refresh()

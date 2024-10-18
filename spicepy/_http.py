@@ -1,5 +1,4 @@
 import datetime
-import json
 from typing import Any, Callable, Dict, Literal, Optional, Union
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
@@ -25,16 +24,20 @@ class HttpRequests:
         method: HttpMethod,
         path: str,
         param: Optional[Dict[str, Any]] = None,
-        body: Optional[Union[Any, bytes, str]] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        body: Optional[str] = None,
     ) -> Any:
-        if not isinstance(body, (bytes, str)) and body is not None:
-            body = json.dumps(body)
+        if headers is None:
+            headers = {}.update(self.session.headers)
+
+        headers.update(self.session.headers)
 
         response: Response = self._operation(method)(
             url=f"{self.base_url}{path}",
             data=body,
-            params=self.prepare_param(param.copy()) if param is not None else param,
+            params=self.prepare_param(param.copy()) if param is not None else None,
             verify=True,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
