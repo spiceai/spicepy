@@ -173,6 +173,11 @@ class Client:
                         f"Invalid refresh option: '{key}'. Permitted options: 'refresh_sql', 'refresh_mode', 'refresh_jitter_max'"
                     )
 
+            # TODO: Remove this override when runtime supports excluding properties we don't want to send
+            for key in ["refresh_sql", "refresh_mode", "refresh_jitter_max"]:
+                if key not in refresh_opts:
+                    refresh_opts[key] = None
+
         response = self.http.send_request(
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",
