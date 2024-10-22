@@ -170,10 +170,10 @@ class Client:
             for key in refresh_opts:
                 if key not in ["refresh_sql", "refresh_mode", "refresh_jitter_max"]:
                     raise ValueError(
-                        f"Invalid refresh option: '{key}'. Permitted options: 'refresh_sql', 'refresh_mode', 'refresh_jitter_max'"
+                        f"Invalid refresh option: '{key}'. Permitted options: 'refresh_sql', 'refresh_mode', 'refresh_jitter_max'"  # pylint: disable=C0301
                     )
 
-            # TODO: Remove this override when runtime supports excluding properties we don't want to send
+            # TODO: Remove this override when runtime supports excluding properties we don't want to send  pylint: disable=W0511
             for key in ["refresh_sql", "refresh_mode", "refresh_jitter_max"]:
                 if key not in refresh_opts:
                     refresh_opts[key] = None

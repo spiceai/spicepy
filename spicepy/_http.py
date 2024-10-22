@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Callable, Dict, Literal, Optional, Union
+from typing import Any, Callable, Dict, Literal, Optional
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
@@ -19,6 +19,7 @@ class HttpRequests:
 
         self.base_url = base_url
 
+    # pylint: disable=R0913
     def send_request(
         self,
         method: HttpMethod,
@@ -28,7 +29,8 @@ class HttpRequests:
         body: Optional[str] = None,
     ) -> Any:
         if headers is None:
-            headers = {}.update(self.session.headers)
+            headers = {}
+            headers.update(self.session.headers)
 
         headers.update(self.session.headers)
 
