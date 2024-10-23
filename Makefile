@@ -14,3 +14,4 @@ apple-silicon-requirements:
 lint:
 	pip install pylint
 	pylint spicepy tests
+	flake8 spicepy tests
