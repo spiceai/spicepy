@@ -20,6 +20,7 @@ class HttpRequests:
         self.base_url = base_url
 
     # pylint: disable=R0913
+    # pylint: disable=R0917
     def send_request(
         self,
         method: HttpMethod,
@@ -27,7 +28,7 @@ class HttpRequests:
         param: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, Any]] = None,
         body: Optional[str] = None,
-    ) -> Any:  # pylint: disable=R0913
+    ) -> Any:
         if headers is None:
             headers = {}
             headers.update(self.session.headers)
