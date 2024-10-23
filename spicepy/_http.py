@@ -27,7 +27,7 @@ class HttpRequests:
         param: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, Any]] = None,
         body: Optional[str] = None,
-    ) -> Any:
+    ) -> Any:  # pylint: disable=R0913
         if headers is None:
             headers = {}
             headers.update(self.session.headers)
