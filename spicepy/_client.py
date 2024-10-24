@@ -170,7 +170,9 @@ class Client:
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",
             body=(
-                json.dumps(refresh_opts) if refresh_opts is not None else json.dumps({})
+                json.dumps(refresh_opts.to_dict())
+                if refresh_opts is not None
+                else json.dumps({})
             ),
             headers={"Content-Type": "application/json"},
         )

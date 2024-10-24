@@ -10,9 +10,16 @@ from .config import SPICE_USER_AGENT
 
 @dataclass
 class RefreshOpts:
-    refresh_sql: str = None
-    refresh_mode: str = None
-    refresh_jitter_max: str = None
+    refresh_sql: Optional[str] = None
+    refresh_mode: Optional[str] = None
+    refresh_jitter_max: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "refresh_sql": self.refresh_sql,
+            "refresh_mode": self.refresh_mode,
+            "refresh_jitter_max": self.refresh_jitter_max,
+        }
 
 
 HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]

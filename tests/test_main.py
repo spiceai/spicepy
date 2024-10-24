@@ -2,7 +2,7 @@ import os
 import time
 import re
 import pytest
-from spicepy import Client
+from spicepy import Client, RefreshOpts
 from spicepy.config import (
     SPICE_USER_AGENT,
     DEFAULT_LOCAL_FLIGHT_URL,
@@ -115,11 +115,10 @@ def test_local_runtime_refresh():
     assert len(pandas_data) == 10
 
     # refresh sql limited to 10 rows
+
     response = client.refresh_dataset(
         "taxi_trips",
-        {
-            "refresh_sql": "SELECT * FROM taxi_trips LIMIT 10",
-        },
+        RefreshOpts(refresh_sql="SELECT * FROM taxi_trips LIMIT 10"),
     )
     assert response["message"] == "Dataset refresh triggered for taxi_trips."
 
@@ -131,9 +130,7 @@ def test_local_runtime_refresh():
     # refresh sql limited to 20 rows
     response = client.refresh_dataset(
         "taxi_trips",
-        {
-            "refresh_sql": "SELECT * FROM taxi_trips LIMIT 20",
-        },
+        RefreshOpts(refresh_sql="SELECT * FROM taxi_trips LIMIT 20"),
     )
     assert response["message"] == "Dataset refresh triggered for taxi_trips."
 
