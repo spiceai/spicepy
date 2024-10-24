@@ -10,9 +10,9 @@ from .config import SPICE_USER_AGENT
 
 @dataclass
 class RefreshOpts:
-    refresh_sql: str
-    refresh_mode: str
-    refresh_jitter_max: str
+    refresh_sql: str = None
+    refresh_mode: str = None
+    refresh_jitter_max: str = None
 
 
 HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
