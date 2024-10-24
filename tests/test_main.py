@@ -3,7 +3,11 @@ import time
 import re
 import pytest
 from spicepy import Client
-from spicepy.config import SPICE_USER_AGENT
+from spicepy.config import (
+    SPICE_USER_AGENT,
+    DEFAULT_LOCAL_FLIGHT_URL,
+    DEFAULT_LOCAL_HTTP_URL,
+)
 
 
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
@@ -18,7 +22,7 @@ def get_cloud_client():
 
 
 def get_local_client():
-    return Client(flight_url="grpc://localhost:50051", http_url="http://localhost:8090")
+    return Client(flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=DEFAULT_LOCAL_HTTP_URL)
 
 
 def test_user_agent_is_populated():

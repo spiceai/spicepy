@@ -13,7 +13,7 @@ from pyarrow._flight import (
     FlightClient,
     Ticket,
 )
-from ._http import HttpRequests
+from ._http import HttpRequests, RefreshOpts
 from . import config
 
 
@@ -164,22 +164,8 @@ class Client:
         return self._flight.query(query, **kwargs)
 
     def refresh_dataset(
-        self, dataset: str, refresh_opts: Optional[Dict[str, str]] = None
+        self, dataset: str, refresh_opts: Optional[RefreshOpts] = None
     ) -> Any:
-        if refresh_opts is not None:
-            for key in refresh_opts:
-                if key not in ["refresh_sql", "refresh_mode", "refresh_jitter_max"]:
-                    raise ValueError(
-                        # flake8: noqa
-                        f"Invalid refresh option: '{key}'. Permitted options: 'refresh_sql', 'refresh_mode', 'refresh_jitter_max'"  # pylint: disable=C0301
-                    )
-
-            # flake8: noqa
-            # TODO: Remove this override when runtime supports excluding properties we don't want to send  pylint: disable=W0511
-            for key in ["refresh_sql", "refresh_mode", "refresh_jitter_max"]:
-                if key not in refresh_opts:
-                    refresh_opts[key] = None
-
         response = self.http.send_request(
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",

@@ -1,10 +1,18 @@
 import datetime
 from typing import Any, Callable, Dict, Literal, Optional
+from dataclasses import dataclass
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
 from .error import SpiceAIError
 from .config import SPICE_USER_AGENT
+
+
+@dataclass
+class RefreshOpts:
+    refresh_sql: str
+    refresh_mode: str
+    refresh_jitter_max: str
 
 
 HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
@@ -31,7 +39,6 @@ class HttpRequests:
     ) -> Any:
         if headers is None:
             headers = {}
-            headers.update(self.session.headers)
 
         headers.update(self.session.headers)
 
