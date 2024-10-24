@@ -1,8 +1,9 @@
+import json
 import os
 from pathlib import Path
 import platform
 import threading
-from typing import Dict, Union
+from typing import Any, Dict, Optional, Union
 
 import certifi
 
@@ -12,7 +13,7 @@ from pyarrow._flight import (
     FlightClient,
     Ticket,
 )
-from ._http import HttpRequests
+from ._http import HttpRequests, RefreshOpts
 from . import config
 
 
@@ -137,13 +138,11 @@ class Client:
         self,
         api_key: str = None,
         flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,
-        firecache_url: str = config.DEFAULT_FIRECACHE_URL,
         http_url: str = config.DEFAULT_HTTP_URL,
         tls_root_cert: Union[str, Path, None] = None,
     ):  # pylint: disable=R0913
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
         self._flight = _SpiceFlight(flight_url, api_key, tls_root_certs)
-        self._firecache = _SpiceFlight(firecache_url, api_key, tls_root_certs)
 
         self.api_key = api_key
         self.http = HttpRequests(http_url, self._headers())
@@ -164,8 +163,21 @@ class Client:
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         return self._flight.query(query, **kwargs)
 
-    def fire_query(self, query: str, **kwargs) -> flight.FlightStreamReader:
-        return self._firecache.query(query, **kwargs)
+    def refresh_dataset(
+        self, dataset: str, refresh_opts: Optional[RefreshOpts] = None
+    ) -> Any:
+        response = self.http.send_request(
+            "POST",
+            f"/v1/datasets/{dataset}/acceleration/refresh",
+            body=(
+                json.dumps(refresh_opts.to_dict())
+                if refresh_opts is not None
+                else json.dumps({})
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+
+        return response
 
 
 class _ArrowFlightCallThread(threading.Thread):

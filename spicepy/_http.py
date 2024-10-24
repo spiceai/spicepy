@@ -1,11 +1,25 @@
 import datetime
-import json
-from typing import Any, Callable, Dict, Literal, Optional, Union
+from typing import Any, Callable, Dict, Literal, Optional
+from dataclasses import dataclass
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
 from .error import SpiceAIError
 from .config import SPICE_USER_AGENT
+
+
+@dataclass
+class RefreshOpts:
+    refresh_sql: Optional[str] = None
+    refresh_mode: Optional[str] = None
+    refresh_jitter_max: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "refresh_sql": self.refresh_sql,
+            "refresh_mode": self.refresh_mode,
+            "refresh_jitter_max": self.refresh_jitter_max,
+        }
 
 
 HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
@@ -20,21 +34,27 @@ class HttpRequests:
 
         self.base_url = base_url
 
+    # pylint: disable=R0913
+    # pylint: disable=R0917
     def send_request(
         self,
         method: HttpMethod,
         path: str,
         param: Optional[Dict[str, Any]] = None,
-        body: Optional[Union[Any, bytes, str]] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        body: Optional[str] = None,
     ) -> Any:
-        if not isinstance(body, (bytes, str)) and body is not None:
-            body = json.dumps(body)
+        if headers is None:
+            headers = {}
+
+        headers.update(self.session.headers)
 
         response: Response = self._operation(method)(
             url=f"{self.base_url}{path}",
             data=body,
-            params=self.prepare_param(param.copy()) if param is not None else param,
+            params=self.prepare_param(param.copy()) if param is not None else None,
             verify=True,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()

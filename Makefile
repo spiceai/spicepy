@@ -12,5 +12,6 @@ apple-silicon-requirements:
 
 .PHONY: lint
 lint:
-	pip install pylint
+	pip install pylint flake8
 	pylint spicepy tests
+	flake8 spicepy tests
