@@ -3,7 +3,7 @@ import os
 import platform
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import certifi
 import pyarrow as pa
@@ -93,7 +93,7 @@ class _ADBCClient:
 
     def _create_param_batch(
         self,
-        params: List[Any],
+        params: list[Any],
     ) -> pa.RecordBatch:
         """Create a parameter record batch for binding to a prepared statement.
 
@@ -131,7 +131,7 @@ class _ADBCClient:
     def query_with_params(
         self,
         sql: str,
-        params: List[Any],
+        params: list[Any],
     ) -> pa.RecordBatchReader:
         """Execute a parameterized SQL query using prepared statements.
 
@@ -271,7 +271,7 @@ class Client:
         self._adbc_client: Optional[_ADBCClient] = None
         self.http = HttpRequests(http_url, self._headers(user_agent))
 
-    def _headers(self, user_agent=None) -> Dict[str, str]:
+    def _headers(self, user_agent=None) -> dict[str, str]:
         headers = {
             "X-API-Key": self._api_key(),
             "Accept": "application/json",
@@ -324,7 +324,7 @@ class Client:
     def query_with_params(
         self,
         sql: str,
-        params: List[Any],
+        params: list[Any],
     ) -> pa.RecordBatchReader:
         """Execute a parameterized SQL query using ADBC.
 
