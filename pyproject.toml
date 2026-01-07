@@ -9,6 +9,12 @@ description = "Spice.ai client library for Python"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
+dependencies = [
+    "pyarrow>=17.0.0",
+    "pandas>=2.2.3",
+    "certifi>=2024.8.30",
+    "requests>=2.32.3",
+]
 authors = [
     {name = "Spice AI, Inc.", email = "webmaster@spice.ai"}
 ]
