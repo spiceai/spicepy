@@ -11,6 +11,9 @@ on:
     tags:
       - v*
 
+permissions:
+  contents: read
+
 jobs:
   lint-ruff:
     runs-on: ubuntu-latest

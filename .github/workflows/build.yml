@@ -12,6 +12,9 @@ on:
       - v*
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   Build:
     runs-on: ${{ matrix.os }}
