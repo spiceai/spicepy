@@ -6,7 +6,7 @@ import time
 import pyarrow as pa
 import pytest
 
-from spicepy import Client, Param, RefreshOpts
+from spicepy import Client, RefreshOpts
 from spicepy.config import DEFAULT_LOCAL_FLIGHT_URL, DEFAULT_LOCAL_HTTP_URL, SPICE_USER_AGENT, get_user_agent
 from spicepy.params import infer_arrow_type
 
@@ -181,84 +181,6 @@ if __name__ == "__main__":
 # ============== Parameterized Query Tests ==============
 
 
-def test_param_factory_methods():
-    """Test Param class factory methods."""
-    # Integer types
-    p1 = Param.int8(1)
-    assert p1.value == 1
-    assert p1.arrow_type == pa.int8()
-    assert p1.has_explicit_type()
-
-    p2 = Param.int16(100)
-    assert p2.value == 100
-    assert p2.arrow_type == pa.int16()
-
-    p3 = Param.int32(1000)
-    assert p3.value == 1000
-    assert p3.arrow_type == pa.int32()
-
-    p4 = Param.int64(10000)
-    assert p4.value == 10000
-    assert p4.arrow_type == pa.int64()
-
-    # Unsigned integer types
-    p5 = Param.uint8(1)
-    assert p5.value == 1
-    assert p5.arrow_type == pa.uint8()
-
-    p6 = Param.uint16(100)
-    assert p6.arrow_type == pa.uint16()
-
-    p7 = Param.uint32(1000)
-    assert p7.arrow_type == pa.uint32()
-
-    p8 = Param.uint64(10000)
-    assert p8.arrow_type == pa.uint64()
-
-    # Floating point types
-    p9 = Param.float32(1.5)
-    assert p9.value == 1.5
-    assert p9.arrow_type == pa.float32()
-
-    p10 = Param.float64(2.5)
-    assert p10.value == 2.5
-    assert p10.arrow_type == pa.float64()
-
-    # String types
-    p11 = Param.string("test")
-    assert p11.value == "test"
-    assert p11.arrow_type == pa.string()
-
-    p12 = Param.large_string("large test")
-    assert p12.value == "large test"
-    assert p12.arrow_type == pa.large_string()
-
-    # Boolean
-    p13 = Param.bool_(True)
-    assert p13.value is True
-    assert p13.arrow_type == pa.bool_()
-
-    # Binary
-    p14 = Param.binary(b"\x01\x02\x03")
-    assert p14.value == b"\x01\x02\x03"
-    assert p14.arrow_type == pa.binary()
-
-    # Null
-    p15 = Param.null()
-    assert p15.value is None
-    assert p15.arrow_type == pa.null()
-
-    # Generic factory method
-    p16 = Param.of(42)
-    assert p16.value == 42
-    assert not p16.has_explicit_type()
-
-    p17 = Param.of(42, pa.int32())
-    assert p17.value == 42
-    assert p17.arrow_type == pa.int32()
-    assert p17.has_explicit_type()
-
-
 def test_infer_arrow_type():
     """Test Arrow type inference from Python values."""
     # Null
@@ -368,11 +290,11 @@ def test_parameterized_query_with_string():
 
 @pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
 def test_parameterized_query_with_explicit_types():
-    """Test parameterized query with explicit Param types."""
+    """Test parameterized query with explicit PyArrow types."""
     client = get_local_client()
 
     reader = client.query_with_params(
-        "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 LIMIT 5", [Param.float64(10.0)]
+        "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 LIMIT 5", [(10.0, pa.float64())]
     )
 
     total_rows = 0
@@ -389,7 +311,7 @@ def test_parameterized_query_mixed_types():
 
     reader = client.query_with_params(
         "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 AND fare_amount > $2 LIMIT 5",
-        [5.0, Param.float64(20.0)],  # Mixed: inferred float and explicit float64
+        [5.0, (20.0, pa.float64())],  # Mixed: inferred float and explicit float64
     )
 
     total_rows = 0
@@ -472,12 +394,12 @@ def test_cloud_parameterized_query_multiple_params():
 @skip_cloud()
 @pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
 def test_cloud_parameterized_query_with_explicit_types():
-    """Test parameterized query with explicit Param types on Spice Cloud."""
+    """Test parameterized query with explicit PyArrow types on Spice Cloud."""
     client = get_cloud_client()
 
     reader = client.query_with_params(
         "SELECT c_custkey, c_name, c_acctbal FROM tpch.customer WHERE c_acctbal > $1 LIMIT 10",
-        [Param.float64(5000.0)],
+        [(5000.0, pa.float64())],
     )
 
     total_rows = 0
@@ -627,7 +549,7 @@ def test_cloud_parameterized_query_with_int8():
 
     reader = client.query_with_params(
         "SELECT r_regionkey, r_name FROM tpch.region WHERE r_regionkey = $1",
-        [Param.int8(1)],
+        [(1, pa.int8())],
     )
 
     total_rows = 0
@@ -649,7 +571,7 @@ def test_cloud_parameterized_query_with_int64():
 
     reader = client.query_with_params(
         "SELECT l_orderkey, l_partkey, l_quantity FROM tpch.lineitem WHERE l_orderkey = $1 LIMIT 10",
-        [Param.int64(1)],
+        [(1, pa.int64())],
     )
 
     total_rows = 0
@@ -671,7 +593,7 @@ def test_cloud_parameterized_query_with_float32():
 
     reader = client.query_with_params(
         "SELECT l_orderkey, l_discount FROM tpch.lineitem WHERE l_discount >= $1 LIMIT 10",
-        [Param.float32(0.05)],
+        [(0.05, pa.float32())],
     )
 
     total_rows = 0
@@ -803,7 +725,7 @@ def test_cloud_parameterized_query_mixed_param_types():
            FROM tpch.supplier
            WHERE s_acctbal > $1 AND s_nationkey = $2
            LIMIT 10""",
-        [Param.float64(8000.0), 24],  # Mix explicit Param and plain value
+        [(8000.0, pa.float64()), 24],  # Mix explicit type tuple and plain value
     )
 
     total_rows = 0
@@ -936,7 +858,7 @@ def test_cloud_parameterized_query_with_bool():
            FROM tpch.lineitem
            WHERE l_returnflag = $1
            LIMIT 10""",
-        [Param.string("R")],  # 'R' for returned
+        [("R", pa.string())],  # 'R' for returned
     )
 
     total_rows = 0

@@ -17,7 +17,7 @@ from pyarrow._flight import (
 
 from . import config
 from ._http import HttpRequests, RefreshOpts
-from .params import Param, infer_arrow_type
+from .params import infer_arrow_type
 
 
 def is_macos_arm64() -> bool:
@@ -98,7 +98,9 @@ class _ADBCClient:
         """Create a parameter record batch for binding to a prepared statement.
 
         Args:
-            params: List of parameter values (can be plain values or Param instances)
+            params: List of parameter values. Each can be:
+                - A plain Python value (int, str, float, etc.) - type will be inferred
+                - A tuple of (value, pyarrow.DataType) for explicit type control
 
         Returns:
             Arrow RecordBatch containing the parameter values
@@ -106,13 +108,12 @@ class _ADBCClient:
         param_values = []
         param_types = []
 
-        for i, param in enumerate(params):
-            if isinstance(param, Param):
-                param_values.append(param.value)
-                if param.has_explicit_type():
-                    param_types.append(param.arrow_type)
-                else:
-                    param_types.append(infer_arrow_type(param.value))
+        for param in params:
+            # Check if param is a tuple of (value, arrow_type)
+            if isinstance(param, tuple) and len(param) == 2 and isinstance(param[1], pa.DataType):
+                value, arrow_type = param
+                param_values.append(value)
+                param_types.append(arrow_type)
             else:
                 param_values.append(param)
                 param_types.append(infer_arrow_type(param))
@@ -137,7 +138,9 @@ class _ADBCClient:
 
         Args:
             sql: SQL query with positional placeholders ($1, $2, etc.)
-            params: List of parameter values (can be plain values or Param instances)
+            params: List of parameter values. Each can be:
+                - A plain Python value (int, str, float, etc.) - type will be inferred
+                - A tuple of (value, pyarrow.DataType) for explicit type control
 
         Returns:
             Arrow RecordBatchReader with query results
@@ -299,13 +302,8 @@ class Client:
 
     def _get_adbc_uri(self) -> str:
         """Convert the Flight URL to an ADBC-compatible URI."""
-        uri = self._flight_url
-        # Convert grpc:// or grpc+tls:// to appropriate format for ADBC
-        if uri.startswith("grpc+tls://"):
-            uri = uri.replace("grpc+tls://", "grpc+tls://")
-        elif uri.startswith("grpc://"):
-            uri = uri.replace("grpc://", "grpc://")
-        return uri
+        # ADBC FlightSQL driver uses the same URI format as Arrow Flight
+        return self._flight_url
 
     def _ensure_adbc_client(self) -> _ADBCClient:
         """Lazily initialize the ADBC client."""
@@ -341,8 +339,8 @@ class Client:
         Parameters should use positional placeholders ($1, $2, etc.) in the SQL query.
 
         Parameters can be:
-        - Simple Python values (int, string, bool, etc.) - type will be inferred
-        - Param instances with explicit type annotation using Param factory methods
+        - Simple Python values (int, str, float, bool, etc.) - type will be inferred
+        - Tuples of (value, pyarrow.DataType) for explicit type control
 
         Example:
             # With automatic type inference
@@ -351,16 +349,16 @@ class Client:
                 [123, "test"]
             )
 
-            # With explicit types
-            from spicepy import Param
+            # With explicit PyArrow types
+            import pyarrow as pa
             reader = client.query_with_params(
                 "SELECT * FROM table WHERE id = $1 AND amount = $2",
-                [Param.int32(123), Param.float64(99.99)]
+                [(123, pa.int32()), (99.99, pa.float64())]
             )
 
         Args:
             sql: SQL query with positional placeholders ($1, $2, etc.)
-            params: List of parameter values (can be plain values or Param instances)
+            params: List of parameter values (plain values or (value, pa.DataType) tuples)
 
         Returns:
             Arrow RecordBatchReader with query results

@@ -87,30 +87,32 @@ reader = client.query_with_params(
 
 #### Explicit Type Control
 
-For precise control over Arrow types, use the `Param` class:
+For precise control over Arrow types, use tuples of `(value, pyarrow.DataType)`:
 
 ```python
-from spicepy import Client, Param
+import pyarrow as pa
+from spicepy import Client
 
 client = Client()
 
 reader = client.query_with_params(
     'SELECT * FROM table WHERE id = $1 AND amount = $2',
-    [Param.int32(123), Param.float64(99.99)]
+    [(123, pa.int32()), (99.99, pa.float64())]
 )
 ```
 
-**Supported Param factory methods:**
+**Common PyArrow types:**
 
-- **Integers**: `Param.int8()`, `Param.int16()`, `Param.int32()`, `Param.int64()`, `Param.uint8()`, `Param.uint16()`, `Param.uint32()`, `Param.uint64()`
-- **Floating point**: `Param.float16()`, `Param.float32()`, `Param.float64()`
-- **Strings**: `Param.string()`, `Param.large_string()`
-- **Binary**: `Param.binary()`, `Param.large_binary()`, `Param.fixed_size_binary()`
-- **Boolean**: `Param.bool_()`
-- **Temporal**: `Param.date32()`, `Param.date64()`, `Param.time32()`, `Param.time64()`, `Param.timestamp()`, `Param.duration()`
-- **Decimals**: `Param.decimal128()`, `Param.decimal256()`
-- **Null**: `Param.null()`
-- **Generic**: `Param.of(value, arrow_type=None)`
+- **Integers**: `pa.int8()`, `pa.int16()`, `pa.int32()`, `pa.int64()`, `pa.uint8()`, `pa.uint16()`, `pa.uint32()`, `pa.uint64()`
+- **Floating point**: `pa.float16()`, `pa.float32()`, `pa.float64()`
+- **Strings**: `pa.string()`, `pa.large_string()`
+- **Binary**: `pa.binary()`, `pa.large_binary()`
+- **Boolean**: `pa.bool_()`
+- **Temporal**: `pa.date32()`, `pa.date64()`, `pa.time32()`, `pa.time64()`, `pa.timestamp()`, `pa.duration()`
+- **Decimals**: `pa.decimal128()`, `pa.decimal256()`
+- **Null**: `pa.null()`
+
+See the [PyArrow documentation](https://arrow.apache.org/docs/python/api/datatypes.html) for the full list of available types.
 
 Querying data is done through a `Client` object that initialize the connection with Spice endpoint. `Client` has the following arguments:
 

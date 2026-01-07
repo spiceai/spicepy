@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pyarrow as pa
 import pytest
 
-from spicepy import Client, Param
+from spicepy import Client
 from spicepy._client import ADBC_AVAILABLE, _ADBCClient, _Cert
 from spicepy.config import DEFAULT_LOCAL_FLIGHT_URL
 
@@ -454,7 +454,7 @@ class TestADBCClientCreateParamBatch:
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
 
         client = _ADBCClient("grpc://localhost:50051")
-        batch = client._create_param_batch([Param.int32(42)])
+        batch = client._create_param_batch([(42, pa.int32())])
 
         assert batch.schema.field(0).type == pa.int32()
 
@@ -476,7 +476,7 @@ class TestADBCClientCreateParamBatch:
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
 
         client = _ADBCClient("grpc://localhost:50051")
-        batch = client._create_param_batch([42, Param.float32(3.14)])
+        batch = client._create_param_batch([42, (3.14, pa.float32())])
 
         assert batch.schema.field(0).type == pa.int64()  # Inferred
         assert batch.schema.field(1).type == pa.float32()  # Explicit
