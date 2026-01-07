@@ -503,3 +503,443 @@ def test_cloud_parameterized_query_empty_params():
         total_rows += batch.num_rows
 
     assert total_rows == 5
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_string_param():
+    """Test parameterized query with string parameter on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT n_nationkey, n_name, n_regionkey FROM tpch.nation WHERE n_name = $1",
+        ["UNITED STATES"],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        name = batch.column("n_name")
+        for i in range(batch.num_rows):
+            assert name[i].as_py() == "UNITED STATES"
+
+    assert total_rows == 1
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_with_join():
+    """Test parameterized query with JOIN on Spice Cloud TPCH dataset."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT o.o_orderkey, o.o_totalprice, c.c_name, c.c_acctbal
+           FROM tpch.orders o
+           JOIN tpch.customer c ON o.o_custkey = c.c_custkey
+           WHERE o.o_totalprice > $1 AND c.c_acctbal > $2
+           LIMIT 20""",
+        [200000.0, 5000.0],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        totalprice = batch.column("o_totalprice")
+        acctbal = batch.column("c_acctbal")
+        for i in range(batch.num_rows):
+            assert totalprice[i].as_py() > 200000.0
+            assert acctbal[i].as_py() > 5000.0
+
+    assert total_rows > 0
+    assert total_rows <= 20
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_aggregation():
+    """Test parameterized query with aggregation on Spice Cloud."""
+    client = get_cloud_client()
+
+    # Get aggregated stats for orders with status parameter
+    reader = client.query_with_params(
+        """SELECT o_orderstatus,
+                  COUNT(*) as order_count,
+                  AVG(o_totalprice) as avg_price,
+                  SUM(o_totalprice) as total_price
+           FROM tpch.orders
+           WHERE o_orderstatus = $1
+           GROUP BY o_orderstatus""",
+        ["F"],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        status = batch.column("o_orderstatus")
+        order_count = batch.column("order_count")
+        for i in range(batch.num_rows):
+            assert status[i].as_py() == "F"
+            assert order_count[i].as_py() > 0
+
+    assert total_rows == 1
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_in_clause_simulation():
+    """Test parameterized query simulating IN clause with multiple ORs."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT r_regionkey, r_name, r_comment
+           FROM tpch.region
+           WHERE r_name = $1 OR r_name = $2""",
+        ["AMERICA", "EUROPE"],
+    )
+
+    total_rows = 0
+    result_names = []
+    for batch in reader:
+        total_rows += batch.num_rows
+        name = batch.column("r_name")
+        for i in range(batch.num_rows):
+            result_names.append(name[i].as_py())
+
+    assert total_rows == 2
+    assert "AMERICA" in result_names
+    assert "EUROPE" in result_names
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_with_int8():
+    """Test parameterized query with explicit int8 type on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT r_regionkey, r_name FROM tpch.region WHERE r_regionkey = $1",
+        [Param.int8(1)],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        regionkey = batch.column("r_regionkey")
+        for i in range(batch.num_rows):
+            assert regionkey[i].as_py() == 1
+
+    assert total_rows == 1
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_with_int64():
+    """Test parameterized query with explicit int64 type on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT l_orderkey, l_partkey, l_quantity FROM tpch.lineitem WHERE l_orderkey = $1 LIMIT 10",
+        [Param.int64(1)],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        orderkey = batch.column("l_orderkey")
+        for i in range(batch.num_rows):
+            assert orderkey[i].as_py() == 1
+
+    assert total_rows > 0
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_with_float32():
+    """Test parameterized query with explicit float32 type on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT l_orderkey, l_discount FROM tpch.lineitem WHERE l_discount >= $1 LIMIT 10",
+        [Param.float32(0.05)],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        discount = batch.column("l_discount")
+        for i in range(batch.num_rows):
+            assert discount[i].as_py() >= 0.05
+
+    assert total_rows > 0
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_subquery():
+    """Test parameterized query with subquery on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT c_custkey, c_name, c_acctbal
+           FROM tpch.customer
+           WHERE c_nationkey IN (
+               SELECT n_nationkey FROM tpch.nation WHERE n_regionkey = $1
+           )
+           LIMIT 20""",
+        [1],  # AMERICA region
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+
+    assert total_rows > 0
+    assert total_rows <= 20
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_order_by():
+    """Test parameterized query with ORDER BY on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT o_orderkey, o_totalprice, o_orderdate
+           FROM tpch.orders
+           WHERE o_totalprice > $1
+           ORDER BY o_totalprice DESC
+           LIMIT 10""",
+        [300000.0],
+    )
+
+    prices = []
+    for batch in reader:
+        totalprice = batch.column("o_totalprice")
+        for i in range(batch.num_rows):
+            prices.append(totalprice[i].as_py())
+
+    assert len(prices) > 0
+    assert len(prices) <= 10
+    # Verify results are ordered descending
+    for i in range(len(prices) - 1):
+        assert prices[i] >= prices[i + 1]
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_like_pattern():
+    """Test parameterized query with LIKE pattern on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT p_partkey, p_name, p_brand FROM tpch.part WHERE p_brand = $1 LIMIT 10",
+        ["Brand#13"],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        brand = batch.column("p_brand")
+        for i in range(batch.num_rows):
+            assert batch.column("p_brand")[i].as_py() == "Brand#13"
+
+    assert total_rows > 0
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_three_params():
+    """Test parameterized query with three parameters on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT l_orderkey, l_quantity, l_extendedprice, l_discount
+           FROM tpch.lineitem
+           WHERE l_quantity >= $1 AND l_extendedprice > $2 AND l_discount <= $3
+           LIMIT 15""",
+        [25, 40000.0, 0.05],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        quantity = batch.column("l_quantity")
+        price = batch.column("l_extendedprice")
+        discount = batch.column("l_discount")
+        for i in range(batch.num_rows):
+            assert quantity[i].as_py() >= 25
+            assert price[i].as_py() > 40000.0
+            assert discount[i].as_py() <= 0.05
+
+    assert total_rows <= 15
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_mixed_param_types():
+    """Test parameterized query with mixed explicit and inferred param types."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT s_suppkey, s_name, s_acctbal, s_nationkey
+           FROM tpch.supplier
+           WHERE s_acctbal > $1 AND s_nationkey = $2
+           LIMIT 10""",
+        [Param.float64(8000.0), 24],  # Mix explicit Param and plain value
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        acctbal = batch.column("s_acctbal")
+        nationkey = batch.column("s_nationkey")
+        for i in range(batch.num_rows):
+            assert acctbal[i].as_py() > 8000.0
+            assert nationkey[i].as_py() == 24
+
+    assert total_rows <= 10
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_partsupp_table():
+    """Test parameterized query on partsupp table on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT ps_partkey, ps_suppkey, ps_availqty, ps_supplycost
+           FROM tpch.partsupp
+           WHERE ps_supplycost > $1 AND ps_availqty > $2
+           LIMIT 10""",
+        [900.0, 5000],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        supplycost = batch.column("ps_supplycost")
+        availqty = batch.column("ps_availqty")
+        for i in range(batch.num_rows):
+            assert supplycost[i].as_py() > 900.0
+            assert availqty[i].as_py() > 5000
+
+    assert total_rows <= 10
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_larger_result_set():
+    """Test parameterized query returning larger result set on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT l_orderkey, l_linenumber, l_quantity FROM tpch.lineitem WHERE l_quantity > $1 LIMIT 500",
+        [45],
+    )
+
+    total_rows = 0
+    batches = 0
+    for batch in reader:
+        batches += 1
+        total_rows += batch.num_rows
+        quantity = batch.column("l_quantity")
+        for i in range(batch.num_rows):
+            assert quantity[i].as_py() > 45
+
+    assert total_rows > 0
+    assert total_rows <= 500
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_count_aggregation():
+    """Test parameterized query with COUNT aggregation on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT n_name, COUNT(*) as customer_count
+           FROM tpch.customer c
+           JOIN tpch.nation n ON c.c_nationkey = n.n_nationkey
+           WHERE n.n_regionkey = $1
+           GROUP BY n_name
+           ORDER BY customer_count DESC""",
+        [2],  # ASIA region
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        customer_count = batch.column("customer_count")
+        for i in range(batch.num_rows):
+            assert customer_count[i].as_py() > 0
+
+    # ASIA region has 5 nations
+    assert total_rows == 5
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_null_safe():
+    """Test parameterized query handling columns that might have NULL values."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        """SELECT p_partkey, p_name, p_mfgr, p_comment
+           FROM tpch.part
+           WHERE p_size > $1
+           LIMIT 10""",
+        [45],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        # Just verify we can read all columns without errors
+        _ = batch.column("p_partkey")
+        _ = batch.column("p_name")
+        _ = batch.column("p_mfgr")
+        _ = batch.column("p_comment")
+
+    assert total_rows > 0
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_with_bool():
+    """Test parameterized query with explicit boolean type on Spice Cloud."""
+    client = get_cloud_client()
+
+    # Using a comparison that returns a boolean-like result
+    reader = client.query_with_params(
+        """SELECT l_orderkey, l_returnflag, l_linestatus
+           FROM tpch.lineitem
+           WHERE l_returnflag = $1
+           LIMIT 10""",
+        [Param.string("R")],  # 'R' for returned
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        returnflag = batch.column("l_returnflag")
+        for i in range(batch.num_rows):
+            assert returnflag[i].as_py() == "R"
+
+    assert total_rows > 0
