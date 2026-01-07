@@ -412,6 +412,7 @@ def test_parameterized_query_no_params():
 
     assert total_rows == 5
 
+
 # ============== Cloud Parameterized Query Tests ==============
 
 
@@ -448,7 +449,10 @@ def test_cloud_parameterized_query_multiple_params():
     client = get_cloud_client()
 
     reader = client.query_with_params(
-        "SELECT o_orderkey, o_totalprice, o_orderstatus FROM tpch.orders WHERE o_totalprice > $1 AND o_orderstatus = $2 LIMIT 10",
+        """SELECT o_orderkey, o_totalprice, o_orderstatus
+           FROM tpch.orders
+           WHERE o_totalprice > $1 AND o_orderstatus = $2
+           LIMIT 10""",
         [100000.0, "O"],
     )
 
@@ -749,9 +753,9 @@ def test_cloud_parameterized_query_like_pattern():
     total_rows = 0
     for batch in reader:
         total_rows += batch.num_rows
-        brand = batch.column("p_brand")
+        p_brand = batch.column("p_brand")
         for i in range(batch.num_rows):
-            assert batch.column("p_brand")[i].as_py() == "Brand#13"
+            assert p_brand[i].as_py() == "Brand#13"
 
     assert total_rows > 0
 
@@ -852,9 +856,7 @@ def test_cloud_parameterized_query_larger_result_set():
     )
 
     total_rows = 0
-    batches = 0
     for batch in reader:
-        batches += 1
         total_rows += batch.num_rows
         quantity = batch.column("l_quantity")
         for i in range(batch.num_rows):
