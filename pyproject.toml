@@ -45,6 +45,7 @@ test = [
     "types-requests>=2.31.0",
     "pandas-stubs>=2.0.0",
     "bandit>=1.7.8",
+    "pandas>=2.0.0",
 ]
 params = [
     "adbc-driver-flightsql>=1.0.0",

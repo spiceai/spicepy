@@ -65,8 +65,8 @@ class _ADBCClient:
         self._uri = uri
         self._api_key = api_key
         self._user_agent = user_agent
-        self._db = None
-        self._conn = None
+        self._db: Any = None
+        self._conn: Any = None
         self._init_connection()
 
     def _init_connection(self):
@@ -76,9 +76,8 @@ class _ADBCClient:
         if self._user_agent:
             ua_string = f"{self._user_agent} {ua_string}"
 
-        # ADBC connection options
-        db_kwargs = {}
-        db_kwargs[adbc_driver_manager.DatabaseOptions.URI.value] = self._uri
+        # ADBC database options (passed to db_kwargs)
+        db_kwargs: dict[str, str] = {}
 
         # Add user agent header
         db_kwargs["adbc.flight.sql.rpc.call_header.user-agent"] = ua_string
@@ -88,8 +87,9 @@ class _ADBCClient:
             db_kwargs[adbc_driver_manager.DatabaseOptions.USERNAME.value] = ""
             db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = self._api_key
 
-        # Create database and connection
-        self._db = adbc_driver_flightsql.dbapi.connect(**db_kwargs)
+        # Create low-level database and connection (avoids dbapi autocommit warning)
+        self._db = adbc_driver_flightsql.connect(self._uri, db_kwargs=db_kwargs)
+        self._conn = adbc_driver_manager.AdbcConnection(self._db)
 
     def _create_param_batch(
         self,
@@ -142,30 +142,39 @@ class _ADBCClient:
         Returns:
             Arrow RecordBatchReader with query results
         """
-        cursor = self._db.cursor()  # type: ignore[attr-defined]
+        # Create a new statement
+        stmt = adbc_driver_manager.AdbcStatement(self._conn)
 
         try:
-            if not params:
-                # No parameters - execute as a regular query
-                cursor.execute(sql)
-            else:
-                # Prepare the statement
-                cursor.adbc_prepare(sql)
+            # Set the SQL query
+            stmt.set_sql_query(sql)
+
+            if params:
+                # Prepare the statement for parameterized execution
+                stmt.prepare()
 
                 # Create parameter batch and bind
                 param_batch = self._create_param_batch(params)
 
-                # Execute with bound parameters
-                cursor.adbc_execute(param_batch)
+                # Bind parameters
+                stmt.bind(param_batch)
 
-            # Fetch results as Arrow table and return reader
-            table = cursor.fetch_arrow_table()
+            # Execute and get results
+            handle, _ = stmt.execute_query()
+
+            # Read results into Arrow table using from_stream
+            reader = pa.RecordBatchReader.from_stream(handle)
+            # Consume reader into table, then return a new reader
+            table = reader.read_all()
             return table.to_reader()
         finally:
-            cursor.close()
+            stmt.close()
 
     def close(self):
         """Close the ADBC connection."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
         if self._db:
             self._db.close()
             self._db = None
