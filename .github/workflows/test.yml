@@ -157,7 +157,7 @@ jobs:
           pip install ".[test,params]"
       - name: Run cloud tests
         env:
-          SPICE_API_KEY: ${{ secrets.SPICE_API_KEY }}
+          SPICE_API_KEY: ${{ secrets.SCP_SPICEAI_TPCH_API_KEY }}
           TEST_SPICE_CLOUD: "true"
         run: |
           pytest -s tests/test_main.py -k "cloud"
