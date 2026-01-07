@@ -343,7 +343,9 @@ class TestADBCClient:
     ) -> None:
         """Test _ADBCClient initialization."""
         mock_db = MagicMock()
-        mock_flightsql.dbapi.connect.return_value = mock_db
+        mock_conn = MagicMock()
+        mock_flightsql.connect.return_value = mock_db
+        mock_manager.AdbcConnection.return_value = mock_conn
         mock_manager.DatabaseOptions.URI.value = "adbc.driver.uri"
         mock_manager.DatabaseOptions.USERNAME.value = "adbc.driver.username"
         mock_manager.DatabaseOptions.PASSWORD.value = "adbc.driver.password"
@@ -351,7 +353,9 @@ class TestADBCClient:
         client = _ADBCClient("grpc://localhost:50051", api_key="test-key")
 
         assert client._db == mock_db
-        mock_flightsql.dbapi.connect.assert_called_once()
+        assert client._conn == mock_conn
+        mock_flightsql.connect.assert_called_once()
+        mock_manager.AdbcConnection.assert_called_once_with(mock_db)
 
     @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
     @patch("spicepy._client.adbc_driver_flightsql")
@@ -363,7 +367,9 @@ class TestADBCClient:
     ) -> None:
         """Test _ADBCClient close."""
         mock_db = MagicMock()
-        mock_flightsql.dbapi.connect.return_value = mock_db
+        mock_conn = MagicMock()
+        mock_flightsql.connect.return_value = mock_db
+        mock_manager.AdbcConnection.return_value = mock_conn
         mock_manager.DatabaseOptions.URI.value = "uri"
         mock_manager.DatabaseOptions.USERNAME.value = "username"
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
@@ -371,8 +377,10 @@ class TestADBCClient:
         client = _ADBCClient("grpc://localhost:50051")
         client.close()
 
+        mock_conn.close.assert_called_once()
         mock_db.close.assert_called_once()
         assert client._db is None
+        assert client._conn is None
 
 
 class TestADBCClientCreateParamBatch:
@@ -388,7 +396,9 @@ class TestADBCClientCreateParamBatch:
     ) -> None:
         """Test _create_param_batch with single integer."""
         mock_db = MagicMock()
-        mock_flightsql.dbapi.connect.return_value = mock_db
+        mock_conn = MagicMock()
+        mock_flightsql.connect.return_value = mock_db
+        mock_manager.AdbcConnection.return_value = mock_conn
         mock_manager.DatabaseOptions.URI.value = "uri"
         mock_manager.DatabaseOptions.USERNAME.value = "username"
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
@@ -411,7 +421,9 @@ class TestADBCClientCreateParamBatch:
     ) -> None:
         """Test _create_param_batch with multiple parameters."""
         mock_db = MagicMock()
-        mock_flightsql.dbapi.connect.return_value = mock_db
+        mock_conn = MagicMock()
+        mock_flightsql.connect.return_value = mock_db
+        mock_manager.AdbcConnection.return_value = mock_conn
         mock_manager.DatabaseOptions.URI.value = "uri"
         mock_manager.DatabaseOptions.USERNAME.value = "username"
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
@@ -434,7 +446,9 @@ class TestADBCClientCreateParamBatch:
     ) -> None:
         """Test _create_param_batch with explicit Param type."""
         mock_db = MagicMock()
-        mock_flightsql.dbapi.connect.return_value = mock_db
+        mock_conn = MagicMock()
+        mock_flightsql.connect.return_value = mock_db
+        mock_manager.AdbcConnection.return_value = mock_conn
         mock_manager.DatabaseOptions.URI.value = "uri"
         mock_manager.DatabaseOptions.USERNAME.value = "username"
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
@@ -454,7 +468,9 @@ class TestADBCClientCreateParamBatch:
     ) -> None:
         """Test _create_param_batch with mixed inferred and explicit types."""
         mock_db = MagicMock()
-        mock_flightsql.dbapi.connect.return_value = mock_db
+        mock_conn = MagicMock()
+        mock_flightsql.connect.return_value = mock_db
+        mock_manager.AdbcConnection.return_value = mock_conn
         mock_manager.DatabaseOptions.URI.value = "uri"
         mock_manager.DatabaseOptions.USERNAME.value = "username"
         mock_manager.DatabaseOptions.PASSWORD.value = "password"
