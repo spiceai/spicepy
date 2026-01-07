@@ -1,0 +1,23 @@
+# CODEOWNERS file for spicepy
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @spiceai/sdk-team
+
+# Core client code
+/spicepy/ @spiceai/sdk-team
+
+# Tests
+/tests/ @spiceai/sdk-team
+
+# CI/CD and infrastructure
+/.github/ @spiceai/platform-team @spiceai/sdk-team
+
+# Documentation
+/docs/ @spiceai/sdk-team
+/README.md @spiceai/sdk-team
+
+# Build configuration
+/pyproject.toml @spiceai/sdk-team
+/setup.py @spiceai/sdk-team
+/requirements.txt @spiceai/sdk-team

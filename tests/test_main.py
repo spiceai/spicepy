@@ -13,14 +13,12 @@ from spicepy.params import infer_arrow_type
 
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
 def skip_cloud():
-    # skip = os.environ.get("TEST_SPICE_CLOUD") != "true"
-    # Skipping all cloud tests for now
-    skip = True
-    return pytest.mark.skipif(skip, reason="Cloud tests disabled")
+    skip = os.environ.get("TEST_SPICE_CLOUD") != "true"
+    return pytest.mark.skipif(skip, reason="Cloud tests disabled (set TEST_SPICE_CLOUD=true)")
 
 
 def get_cloud_client():
-    api_key = os.environ["API_KEY"]
+    api_key = os.environ.get("SPICE_API_KEY", os.environ.get("API_KEY", ""))
     return Client(api_key=api_key, flight_url="grpc+tls://flight.spiceai.io")
 
 
@@ -35,23 +33,25 @@ def test_user_agent_is_populated():
     assert re.match(matching_regex, SPICE_USER_AGENT)
 
 
+@pytest.mark.cloud
 @skip_cloud()
 def test_flight_recent_blocks():
     client = get_cloud_client()
-    data = client.query("SELECT * FROM eth.recent_blocks LIMIT 10")
+    data = client.query("SELECT * FROM tpch.lineitem LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
 
+@pytest.mark.cloud
 @skip_cloud()
 def test_flight_streaming():
     client = get_cloud_client()
     query = """
-SELECT number,
-       "timestamp",
-       base_fee_per_gas,
-       base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei
-FROM eth.blocks limit 2000
+SELECT o_orderkey,
+       o_custkey,
+       o_orderstatus,
+       o_totalprice
+FROM tpch.orders LIMIT 2000
     """
     reader = client.query(query)
 
@@ -72,20 +72,17 @@ FROM eth.blocks limit 2000
     assert num_batches > 1
 
 
+@pytest.mark.cloud
 @skip_cloud()
 def test_flight_timeout():
     client = get_cloud_client()
-    query = """SELECT block_number,
-       TO_TIMESTAMP(block_timestamp) as block_timestamp,
-       avg(gas) as avg_gas_used,
-       avg(max_priority_fee_per_gas) as avg_max_priority_fee_per_gas,
-       avg(gas_price) as avg_gas_price,
-       avg(gas_price / 1e9) AS avg_gas_price_in_gwei,
-       avg(gas * (gas_price / 1e18)) AS avg_fee_in_eth
-FROM eth.transactions
-WHERE block_timestamp > UNIX_TIMESTAMP()-60*60*24*30 -- last 30 days
-GROUP BY block_number, block_timestamp
-ORDER BY block_number DESC"""
+    query = """SELECT o_orderstatus,
+       COUNT(*) as order_count,
+       AVG(o_totalprice) as avg_price,
+       SUM(o_totalprice) as total_price
+FROM tpch.orders
+GROUP BY o_orderstatus
+ORDER BY total_price DESC"""
     try:
         prev_time = time.time()
         _ = client.query(query, timeout=1)
@@ -408,6 +405,98 @@ def test_parameterized_query_no_params():
     client = get_local_client()
 
     reader = client.query_with_params("SELECT trip_distance, fare_amount FROM taxi_trips LIMIT 5", [])
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+
+    assert total_rows == 5
+
+# ============== Cloud Parameterized Query Tests ==============
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_basic():
+    """Test parameterized query with Spice Cloud TPCH dataset."""
+    client = get_cloud_client()
+
+    # Test with integer parameter
+    reader = client.query_with_params(
+        "SELECT l_orderkey, l_quantity, l_extendedprice FROM tpch.lineitem WHERE l_quantity > $1 LIMIT 10",
+        [40],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        # Validate l_quantity > 40
+        quantity = batch.column("l_quantity")
+        for i in range(batch.num_rows):
+            assert quantity[i].as_py() > 40
+
+    assert total_rows > 0
+    assert total_rows <= 10
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_multiple_params():
+    """Test parameterized query with multiple parameters on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT o_orderkey, o_totalprice, o_orderstatus FROM tpch.orders WHERE o_totalprice > $1 AND o_orderstatus = $2 LIMIT 10",
+        [100000.0, "O"],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        totalprice = batch.column("o_totalprice")
+        status = batch.column("o_orderstatus")
+        for i in range(batch.num_rows):
+            assert totalprice[i].as_py() > 100000.0
+            assert status[i].as_py() == "O"
+
+    assert total_rows <= 10
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_with_explicit_types():
+    """Test parameterized query with explicit Param types on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT c_custkey, c_name, c_acctbal FROM tpch.customer WHERE c_acctbal > $1 LIMIT 10",
+        [Param.float64(5000.0)],
+    )
+
+    total_rows = 0
+    for batch in reader:
+        total_rows += batch.num_rows
+        acctbal = batch.column("c_acctbal")
+        for i in range(batch.num_rows):
+            assert acctbal[i].as_py() > 5000.0
+
+    assert total_rows <= 10
+
+
+@pytest.mark.cloud
+@skip_cloud()
+@pytest.mark.skipif(skip_if_no_adbc(), reason="ADBC driver not installed")
+def test_cloud_parameterized_query_empty_params():
+    """Test parameterized query with empty params on Spice Cloud."""
+    client = get_cloud_client()
+
+    reader = client.query_with_params(
+        "SELECT n_nationkey, n_name, n_regionkey FROM tpch.nation LIMIT 5",
+        [],
+    )
 
     total_rows = 0
     for batch in reader:
