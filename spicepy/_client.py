@@ -1,11 +1,12 @@
 import json
 import os
-from pathlib import Path
 import platform
 import threading
-from typing import Any, Dict, Optional, Union
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 import certifi
+import pyarrow as pa
 
 # pylint: disable=E0611
 from pyarrow._flight import (
@@ -13,15 +14,14 @@ from pyarrow._flight import (
     FlightClient,
     Ticket,
 )
-from ._http import HttpRequests, RefreshOpts
+
 from . import config
+from ._http import HttpRequests, RefreshOpts
+from .params import Param, infer_arrow_type
 
 
 def is_macos_arm64() -> bool:
-    return (
-        platform.platform().lower().startswith("macos")
-        and platform.machine() == "arm64"
-    )
+    return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
 
 
 try:
@@ -35,7 +35,140 @@ except (ImportError, ModuleNotFoundError) as error:
         ) from error
     raise error from error
 
+try:
+    import adbc_driver_flightsql.dbapi
+    import adbc_driver_manager
+
+    ADBC_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    adbc_driver_flightsql = None  # type: ignore
+    adbc_driver_manager = None  # type: ignore
+    ADBC_AVAILABLE = False
+
 DEFAULT_QUERY_TIMEOUT_SECS = 10 * 60
+
+
+class _ADBCClient:
+    """ADBC client for parameterized queries using FlightSQL."""
+
+    def __init__(
+        self,
+        uri: str,
+        api_key: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ):
+        if not ADBC_AVAILABLE:
+            raise ImportError(
+                "ADBC driver is not available. Install it with: pip install adbc-driver-flightsql adbc-driver-manager"
+            )
+
+        self._uri = uri
+        self._api_key = api_key
+        self._user_agent = user_agent
+        self._db = None
+        self._conn = None
+        self._init_connection()
+
+    def _init_connection(self):
+        """Initialize the ADBC connection."""
+        # Build user agent string
+        ua_string = config.SPICE_USER_AGENT
+        if self._user_agent:
+            ua_string = f"{self._user_agent} {ua_string}"
+
+        # ADBC connection options
+        db_kwargs = {}
+        db_kwargs[adbc_driver_manager.DatabaseOptions.URI.value] = self._uri
+
+        # Add user agent header
+        db_kwargs["adbc.flight.sql.rpc.call_header.user-agent"] = ua_string
+
+        # Add authentication if API key provided
+        if self._api_key:
+            db_kwargs[adbc_driver_manager.DatabaseOptions.USERNAME.value] = ""
+            db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = self._api_key
+
+        # Create database and connection
+        self._db = adbc_driver_flightsql.dbapi.connect(**db_kwargs)
+
+    def _create_param_batch(
+        self,
+        params: List[Any],
+    ) -> pa.RecordBatch:
+        """Create a parameter record batch for binding to a prepared statement.
+
+        Args:
+            params: List of parameter values (can be plain values or Param instances)
+
+        Returns:
+            Arrow RecordBatch containing the parameter values
+        """
+        param_values = []
+        param_types = []
+
+        for i, param in enumerate(params):
+            if isinstance(param, Param):
+                param_values.append(param.value)
+                if param.has_explicit_type():
+                    param_types.append(param.arrow_type)
+                else:
+                    param_types.append(infer_arrow_type(param.value))
+            else:
+                param_values.append(param)
+                param_types.append(infer_arrow_type(param))
+
+        # Create parameter arrays (each with a single row)
+        param_arrays = []
+        for value, arrow_type in zip(param_values, param_types):
+            param_arrays.append(pa.array([value], type=arrow_type))
+
+        # Create parameter schema with positional field names ($1, $2, etc.)
+        param_fields = [pa.field(f"${i + 1}", param_types[i]) for i in range(len(params))]
+        param_schema = pa.schema(param_fields)
+
+        return pa.record_batch(param_arrays, schema=param_schema)
+
+    def query_with_params(
+        self,
+        sql: str,
+        params: List[Any],
+    ) -> pa.RecordBatchReader:
+        """Execute a parameterized SQL query using prepared statements.
+
+        Args:
+            sql: SQL query with positional placeholders ($1, $2, etc.)
+            params: List of parameter values (can be plain values or Param instances)
+
+        Returns:
+            Arrow RecordBatchReader with query results
+        """
+        cursor = self._db.cursor()  # type: ignore[attr-defined]
+
+        try:
+            if not params:
+                # No parameters - execute as a regular query
+                cursor.execute(sql)
+            else:
+                # Prepare the statement
+                cursor.adbc_prepare(sql)
+
+                # Create parameter batch and bind
+                param_batch = self._create_param_batch(params)
+
+                # Execute with bound parameters
+                cursor.adbc_execute(param_batch)
+
+            # Fetch results as Arrow table and return reader
+            table = cursor.fetch_arrow_table()
+            return table.to_reader()
+        finally:
+            cursor.close()
+
+    def close(self):
+        """Close the ADBC connection."""
+        if self._db:
+            self._db.close()
+            self._db = None
 
 
 class _Cert:
@@ -44,11 +177,7 @@ class _Cert:
         tls_root_cert,
     ):
         if tls_root_cert is not None:
-            tls_root_cert = (
-                tls_root_cert
-                if isinstance(tls_root_cert, Path)
-                else Path(tls_root_cert)
-            )
+            tls_root_cert = tls_root_cert if isinstance(tls_root_cert, Path) else Path(tls_root_cert)
         else:
             tls_root_cert = Path(certifi.where())
 
@@ -74,9 +203,7 @@ class _SpiceFlight:
         self._flight_client = flight.connect(grpc, tls_root_certs=tls_root_certs)
         self._api_key = api_key
         self.headers = [_SpiceFlight._user_agent(user_agent)]
-        self._flight_options = flight.FlightCallOptions(
-            headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-        )
+        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
         self._authenticate()
 
     def _authenticate(self):
@@ -85,42 +212,30 @@ class _SpiceFlight:
                 self._flight_client.authenticate_basic_token("", self._api_key),
                 _SpiceFlight._user_agent(),
             ]
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-            )
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
         else:
             self.headers = [_SpiceFlight._user_agent()]
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-            )
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
-        timeout = kwargs.get("timeout", None)
+        timeout = kwargs.get("timeout")
 
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=timeout
-            )
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
 
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options
         )
 
         try:
-            reader = self._threaded_flight_do_get(
-                ticket=flight_info.endpoints[0].ticket
-            )
+            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
         except flight.FlightUnauthenticatedError:
             self._authenticate()
-            reader = self._threaded_flight_do_get(
-                ticket=flight_info.endpoints[0].ticket
-            )
+            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
         except flight.FlightTimedOutError as exc:
-            raise TimeoutError(
-                f"Query timed out and was canceled after {timeout} seconds."
-            ) from exc
+            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
 
@@ -141,16 +256,19 @@ class Client:
     # pylint: disable=R0917
     def __init__(
         self,
-        api_key: str = None,
+        api_key: Optional[str] = None,
         flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,
         http_url: str = config.DEFAULT_HTTP_URL,
         tls_root_cert: Union[str, Path, None] = None,
         user_agent: Optional[str] = None,
     ):  # pylint: disable=R0913
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
-        self._flight = _SpiceFlight(flight_url, api_key, tls_root_certs, user_agent)
+        self._flight = _SpiceFlight(flight_url, api_key or "", tls_root_certs, user_agent)
 
         self.api_key = api_key
+        self._flight_url = flight_url
+        self._user_agent = user_agent
+        self._adbc_client: Optional[_ADBCClient] = None
         self.http = HttpRequests(http_url, self._headers(user_agent))
 
     def _headers(self, user_agent=None) -> Dict[str, str]:
@@ -168,22 +286,91 @@ class Client:
         key = self.api_key
         if key is None:
             key = os.environ.get("SPICE_API_KEY")
-        return key
+        return key or ""
+
+    def _get_adbc_uri(self) -> str:
+        """Convert the Flight URL to an ADBC-compatible URI."""
+        uri = self._flight_url
+        # Convert grpc:// or grpc+tls:// to appropriate format for ADBC
+        if uri.startswith("grpc+tls://"):
+            uri = uri.replace("grpc+tls://", "grpc+tls://")
+        elif uri.startswith("grpc://"):
+            uri = uri.replace("grpc://", "grpc://")
+        return uri
+
+    def _ensure_adbc_client(self) -> _ADBCClient:
+        """Lazily initialize the ADBC client."""
+        if self._adbc_client is None:
+            self._adbc_client = _ADBCClient(
+                uri=self._get_adbc_uri(),
+                api_key=self._api_key(),
+                user_agent=self._user_agent,
+            )
+        return self._adbc_client
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        """Execute a SQL query against Spice.
+
+        Args:
+            query: SQL query string
+            **kwargs: Additional options including:
+                - timeout: Query timeout in seconds
+
+        Returns:
+            FlightStreamReader with query results
+        """
         return self._flight.query(query, **kwargs)
 
-    def refresh_dataset(
-        self, dataset: str, refresh_opts: Optional[RefreshOpts] = None
-    ) -> Any:
+    def query_with_params(
+        self,
+        sql: str,
+        params: List[Any],
+    ) -> pa.RecordBatchReader:
+        """Execute a parameterized SQL query using ADBC.
+
+        This method is recommended for queries with user input to prevent SQL injection.
+        Parameters should use positional placeholders ($1, $2, etc.) in the SQL query.
+
+        Parameters can be:
+        - Simple Python values (int, string, bool, etc.) - type will be inferred
+        - Param instances with explicit type annotation using Param factory methods
+
+        Example:
+            # With automatic type inference
+            reader = client.query_with_params(
+                "SELECT * FROM table WHERE id = $1 AND name = $2",
+                [123, "test"]
+            )
+
+            # With explicit types
+            from spicepy import Param
+            reader = client.query_with_params(
+                "SELECT * FROM table WHERE id = $1 AND amount = $2",
+                [Param.int32(123), Param.float64(99.99)]
+            )
+
+        Args:
+            sql: SQL query with positional placeholders ($1, $2, etc.)
+            params: List of parameter values (can be plain values or Param instances)
+
+        Returns:
+            Arrow RecordBatchReader with query results
+
+        Raises:
+            ImportError: If ADBC driver is not installed
+            TypeError: If a parameter type is not supported
+            ValueError: If params is None
+        """
+        if params is None:
+            raise ValueError("params must be a list, not None. Use [] for queries without parameters.")
+        adbc = self._ensure_adbc_client()
+        return adbc.query_with_params(sql, params)
+
+    def refresh_dataset(self, dataset: str, refresh_opts: Optional[RefreshOpts] = None) -> Any:
         response = self.http.send_request(
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",
-            body=(
-                json.dumps(refresh_opts.to_dict())
-                if refresh_opts is not None
-                else json.dumps({})
-            ),
+            body=(json.dumps(refresh_opts.to_dict()) if refresh_opts is not None else json.dumps({})),
             headers={"Content-Type": "application/json"},
         )
 

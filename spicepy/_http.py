@@ -1,11 +1,12 @@
 import datetime
-from typing import Any, Callable, Dict, Literal, Optional
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, Literal, Optional
+
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
-from .error import SpiceAIError
 from .config import SPICE_USER_AGENT
+from .error import SpiceAIError
 
 
 @dataclass
@@ -50,7 +51,7 @@ class HttpRequests:
 
         headers.update(self.session.headers)
 
-        response: Response = self._operation(method)(
+        response: Response = self._operation(method)(  # type: ignore[call-arg]
             url=f"{self.base_url}{path}",
             data=body,
             params=self.prepare_param(param.copy()) if param is not None else None,
@@ -68,7 +69,7 @@ class HttpRequests:
                 params[k] = int(val.timestamp())
         return params
 
-    def _operation(self, method: HttpMethod) -> Callable[[], Response]:
+    def _operation(self, method: HttpMethod) -> Callable[..., Response]:
         if method == "GET":
             _call = self.session.get
         elif method == "POST":
@@ -85,7 +86,7 @@ class HttpRequests:
 
     def _create_session(self, headers: Dict[str, str]) -> Session:
         sess = Session()
-        sess.headers = headers
+        sess.headers = headers  # type: ignore[assignment]
         sess.mount(
             "https://",
             HTTPAdapter(

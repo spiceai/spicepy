@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Extract version from setup.py
         id: get-version
@@ -25,7 +25,7 @@ jobs:
           VERSION=$(cat setup.py | grep -E '^ +version="[0-9.]+",' | cut -d'"' -f2)
           echo "Extracted version is $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          
+
       - name: Check if tag exists
         id: check-tag
         run: |
@@ -41,10 +41,10 @@ jobs:
     needs: check-and-extract
     if: needs.check-and-extract.outputs.tag-exists == '0'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Create and push tag
         run: |

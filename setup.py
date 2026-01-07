@@ -50,7 +50,13 @@ def setup_package():
         long_description_content_type="text/markdown",
         packages=["spicepy"],
         install_requires=parse_requirements("requirements.txt"),
-        extras_require={"test": parse_requirements("test.requirements.txt")},
+        extras_require={
+            "test": parse_requirements("test.requirements.txt"),
+            "params": [
+                "adbc-driver-flightsql>=1.0.0",
+                "adbc-driver-manager>=1.0.0",
+            ],
+        },
         python_requires=">=3.8",
         platforms=["Any"],
     )

@@ -8,6 +8,12 @@ Spice.ai client library for Python.
 pip install git+https://github.com/spiceai/spicepy@v2.0.0
 ```
 
+For parameterized query support, install with the optional `params` extra:
+
+```bash
+pip install "spicepy[params]"
+```
+
 ## Usage
 
 ### Arrow Query with local spice runtime
@@ -36,6 +42,67 @@ client = Client(
 data = client.query('SELECT * FROM taxi_trips LIMIT 10;', timeout=5*60)
 pd = data.read_pandas()
 ```
+
+### Parameterized Queries (Recommended)
+
+Use parameterized queries to prevent SQL injection and improve query performance. Parameters use positional placeholders (`$1`, `$2`, etc.):
+
+```python
+from spicepy import Client
+
+client = Client()
+
+# Query with automatic type inference
+reader = client.query_with_params(
+    'SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 LIMIT 10',
+    [5.0]
+)
+
+for batch in reader:
+    print(batch.to_pandas())
+
+# Query without parameters (use empty list)
+reader = client.query_with_params(
+    'SELECT * FROM taxi_trips LIMIT 10',
+    []
+)
+```
+
+#### Multiple Parameters
+
+```python
+reader = client.query_with_params(
+    'SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 AND fare_amount > $2 LIMIT 10',
+    [5.0, 20.0]
+)
+```
+
+#### Explicit Type Control
+
+For precise control over Arrow types, use the `Param` class:
+
+```python
+from spicepy import Client, Param
+
+client = Client()
+
+reader = client.query_with_params(
+    'SELECT * FROM table WHERE id = $1 AND amount = $2',
+    [Param.int32(123), Param.float64(99.99)]
+)
+```
+
+**Supported Param factory methods:**
+
+- **Integers**: `Param.int8()`, `Param.int16()`, `Param.int32()`, `Param.int64()`, `Param.uint8()`, `Param.uint16()`, `Param.uint32()`, `Param.uint64()`
+- **Floating point**: `Param.float16()`, `Param.float32()`, `Param.float64()`
+- **Strings**: `Param.string()`, `Param.large_string()`
+- **Binary**: `Param.binary()`, `Param.large_binary()`, `Param.fixed_size_binary()`
+- **Boolean**: `Param.bool_()`
+- **Temporal**: `Param.date32()`, `Param.date64()`, `Param.time32()`, `Param.time64()`, `Param.timestamp()`, `Param.duration()`
+- **Decimals**: `Param.decimal128()`, `Param.decimal256()`
+- **Null**: `Param.null()`
+- **Generic**: `Param.of(value, arrow_type=None)`
 
 Querying data is done through a `Client` object that initialize the connection with Spice endpoint. `Client` has the following arguments:
 

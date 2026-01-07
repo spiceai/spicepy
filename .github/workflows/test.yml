@@ -10,7 +10,7 @@ on:
       - release-*
     tags:
       - v*
-  
+
   workflow_dispatch:
 
 jobs:
@@ -19,10 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12']
-    name: Test with pip install ${{ matrix.python-version }}
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    name: Test pip install (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -32,16 +32,38 @@ jobs:
         run: |
           pip install .
 
-  pytest:
+  pytest-unit:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.11', '3.12']
-    name: Test on ${{ matrix.os }} with pytest ${{ matrix.python-version }}
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    name: Unit tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install requirements
+        run: |
+          pip install ".[test]"
+      - name: Run unit tests
+        run: |
+          pytest -s -m "unit or not (integration or cloud or slow)" --ignore=tests/test_main.py tests/
+
+  pytest-integration:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    name: Integration tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
+    steps:
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -59,7 +81,7 @@ jobs:
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
           $HOME/.spice/bin/spice install
-      
+
       - name: Install Spice (https://install.spiceai.org) (MacOS)
         if: matrix.os == 'macos-latest'
         run: |
@@ -104,7 +126,7 @@ jobs:
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
           TEST_SPICE_CLOUD: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'}}
         run: |
-          pytest -s
+          pytest -s tests/test_main.py
 
       - name: Stop spice and check logs
         working-directory: spice_qs
@@ -112,3 +134,31 @@ jobs:
         run: |
           killall spice || true
           cat spice.log
+
+  coverage:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    name: Test coverage (Python ${{ matrix.python-version }})
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install requirements
+        run: |
+          pip install ".[test]"
+      - name: Run coverage
+        run: |
+          pytest --cov=spicepy --cov-report=xml --cov-report=term-missing --ignore=tests/test_main.py tests/
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
