@@ -340,9 +340,7 @@ class TestClientQueryWithParams:
         client = Client(flight_url="grpc://localhost:50051", api_key="test-key")
         result = client.query_with_params("SELECT * FROM t WHERE id = $1", [42])
 
-        mock_adbc.query_with_params.assert_called_once_with(
-            "SELECT * FROM t WHERE id = $1", [42]
-        )
+        mock_adbc.query_with_params.assert_called_once_with("SELECT * FROM t WHERE id = $1", [42])
         assert result == mock_reader
 
     @patch("spicepy._client._SpiceFlight")
