@@ -753,6 +753,7 @@ class TestSpiceFlight:
             tls_root_certs=b"cert",
         )
 
+        assert flight_instance is not None
         mock_client.authenticate_basic_token.assert_called_with("", "test-api-key")
 
     @patch("spicepy._client.flight")
@@ -761,7 +762,7 @@ class TestSpiceFlight:
         mock_flight: MagicMock,
     ) -> None:
         """Test _SpiceFlight.query method."""
-        from spicepy._client import _SpiceFlight, _ArrowFlightCallThread
+        from spicepy._client import _SpiceFlight
 
         mock_client = MagicMock()
         mock_flight.connect.return_value = mock_client
@@ -774,7 +775,6 @@ class TestSpiceFlight:
         mock_client.get_flight_info.return_value = mock_flight_info
 
         mock_reader = MagicMock()
-        mock_client.do_get.return_value = mock_reader
 
         flight_instance = _SpiceFlight(
             grpc="grpc://localhost:50051",
@@ -782,11 +782,11 @@ class TestSpiceFlight:
             tls_root_certs=b"cert",
         )
 
-        with patch.object(_ArrowFlightCallThread, "start"):
-            with patch.object(_ArrowFlightCallThread, "is_alive", return_value=False):
-                with patch.object(_ArrowFlightCallThread, "reader", mock_reader, create=True):
-                    result = flight_instance.query("SELECT 1")
+        # Mock the _threaded_flight_do_get method directly
+        with patch.object(flight_instance, "_threaded_flight_do_get", return_value=mock_reader):
+            result = flight_instance.query("SELECT 1")
 
+        assert result is mock_reader
         mock_client.get_flight_info.assert_called_once()
 
     @patch("spicepy._client.flight")
@@ -795,7 +795,7 @@ class TestSpiceFlight:
         mock_flight: MagicMock,
     ) -> None:
         """Test _SpiceFlight.query with timeout parameter."""
-        from spicepy._client import _SpiceFlight, _ArrowFlightCallThread
+        from spicepy._client import _SpiceFlight
 
         mock_client = MagicMock()
         mock_flight.connect.return_value = mock_client
@@ -815,10 +815,9 @@ class TestSpiceFlight:
             tls_root_certs=b"cert",
         )
 
-        with patch.object(_ArrowFlightCallThread, "start"):
-            with patch.object(_ArrowFlightCallThread, "is_alive", return_value=False):
-                with patch.object(_ArrowFlightCallThread, "reader", mock_reader, create=True):
-                    flight_instance.query("SELECT 1", timeout=60)
+        # Mock the _threaded_flight_do_get method directly
+        with patch.object(flight_instance, "_threaded_flight_do_get", return_value=mock_reader):
+            flight_instance.query("SELECT 1", timeout=60)
 
     @patch("spicepy._client.flight")
     def test_spice_flight_query_invalid_timeout_raises(
@@ -849,8 +848,9 @@ class TestSpiceFlight:
         mock_flight: MagicMock,
     ) -> None:
         """Test _SpiceFlight.query re-authenticates on FlightUnauthenticatedError."""
-        from spicepy._client import _SpiceFlight, _ArrowFlightCallThread
         from pyarrow._flight import FlightUnauthenticatedError
+
+        from spicepy._client import _SpiceFlight
 
         mock_client = MagicMock()
         mock_flight.connect.return_value = mock_client
@@ -894,7 +894,6 @@ class TestSpiceFlight:
     ) -> None:
         """Test _SpiceFlight authentication without API key."""
         from spicepy._client import _SpiceFlight
-        from spicepy.config import SPICE_USER_AGENT
 
         mock_client = MagicMock()
         mock_flight.connect.return_value = mock_client
@@ -1012,4 +1011,3 @@ class TestIsMacosArm64:
         mock_platform.machine.return_value = "x86_64"
 
         assert is_macos_arm64() is False
-

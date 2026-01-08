@@ -244,3 +244,8 @@ directory = "htmlcov"
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
 skips = ["B101"]  # assert_used
+
+[dependency-groups]
+dev = [
+    "build>=1.3.0",
+]
