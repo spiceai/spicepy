@@ -219,7 +219,7 @@ class _SpiceFlight:
         self._authenticate()
 
     def _authenticate(self):
-        if self._api_key is not None:
+        if self._api_key:
             self.headers = [
                 self._flight_client.authenticate_basic_token("", self._api_key),
                 _SpiceFlight._user_agent(),
