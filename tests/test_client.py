@@ -908,6 +908,35 @@ class TestSpiceFlight:
         assert len(flight_instance.headers) == 1
         assert flight_instance.headers[0][0] == b"user-agent"
 
+    @patch("spicepy._client.flight")
+    def test_spice_flight_authenticate_with_empty_string_api_key(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight authentication with empty string API key.
+
+        Empty string API key should be treated the same as None - no authentication
+        should be attempted. This prevents gRPC errors like 'Metadata keys cannot
+        be zero length' that occur when authenticate_basic_token is called with
+        empty credentials.
+        """
+        from spicepy._client import _SpiceFlight
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="",
+            tls_root_certs=b"cert",
+        )
+
+        # authenticate_basic_token should not be called when api_key is empty string
+        mock_client.authenticate_basic_token.assert_not_called()
+        # Headers should only contain user-agent
+        assert len(flight_instance.headers) == 1
+        assert flight_instance.headers[0][0] == b"user-agent"
+
 
 class TestArrowFlightCallThread:
     """Test _ArrowFlightCallThread class."""
