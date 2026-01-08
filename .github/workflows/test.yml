@@ -10,8 +10,11 @@ on:
       - release-*
     tags:
       - v*
-  
+
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test_pip_install:
@@ -19,10 +22,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12']
-    name: Test with pip install ${{ matrix.python-version }}
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    name: Test pip install (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -32,16 +35,38 @@ jobs:
         run: |
           pip install .
 
-  pytest:
+  pytest-unit:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.11', '3.12']
-    name: Test on ${{ matrix.os }} with pytest ${{ matrix.python-version }}
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    name: Unit tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install requirements
+        run: |
+          pip install ".[test]"
+      - name: Run unit tests
+        run: |
+          pytest -s -m "unit or not (integration or cloud or slow)" --ignore=tests/test_main.py tests/
+
+  pytest-integration:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    name: Integration tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
+    steps:
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -59,7 +84,7 @@ jobs:
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
           $HOME/.spice/bin/spice install
-      
+
       - name: Install Spice (https://install.spiceai.org) (MacOS)
         if: matrix.os == 'macos-latest'
         run: |
@@ -84,8 +109,15 @@ jobs:
           cd spice_qs
           spice add spiceai/quickstart
           spiced &> spice.log &
-          # time to initialize added dataset
-          sleep 10
+          # Wait for runtime to be ready (poll /v1/ready endpoint)
+          for i in {1..60}; do
+            if curl -s http://localhost:8090/v1/ready > /dev/null 2>&1; then
+              echo "Spice runtime is ready"
+              break
+            fi
+            echo "Waiting for Spice runtime to be ready... ($i/60)"
+            sleep 1
+          done
 
       - name: Init and start spice app (Windows)
         if: matrix.os == 'windows-latest'
@@ -94,17 +126,31 @@ jobs:
           cd spice_qs
           spice add spiceai/quickstart
           Start-Process -FilePath spice run
-          # time to initialize added dataset
-          Start-Sleep -Seconds 10
+          # Wait for runtime to be ready (poll /v1/ready endpoint)
+          $timeout = 60
+          $elapsed = 0
+          while ($elapsed -lt $timeout) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://localhost:8090/v1/ready" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Spice runtime is ready"
+                break
+              }
+            } catch {
+              Write-Host "Waiting for Spice runtime to be ready... ($elapsed/$timeout)"
+            }
+            Start-Sleep -Seconds 1
+            $elapsed++
+          }
         shell: pwsh
 
       - name: Running tests
         env:
           API_KEY: ${{ secrets.API_KEY }}
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
-          TEST_SPICE_CLOUD: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'}}
+          TEST_SPICE_CLOUD: 'false'
         run: |
-          pytest -s
+          pytest -s tests/test_main.py -k "not cloud"
 
       - name: Stop spice and check logs
         working-directory: spice_qs
@@ -112,3 +158,55 @@ jobs:
         run: |
           killall spice || true
           cat spice.log
+
+  pytest-cloud:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12']
+    name: Cloud tests (Python ${{ matrix.python-version }})
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install requirements
+        run: |
+          pip install ".[test,params]"
+      - name: Run cloud tests
+        env:
+          SPICE_API_KEY: ${{ secrets.SCP_SPICEAI_TPCH_API_KEY }}
+          TEST_SPICE_CLOUD: 'true'
+        run: |
+          pytest -s tests/test_main.py -k "cloud"
+
+  coverage:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    name: Test coverage (Python ${{ matrix.python-version }})
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install requirements
+        run: |
+          pip install ".[test]"
+      - name: Run coverage
+        run: |
+          pytest --cov=spicepy --cov-report=xml --cov-report=term-missing --ignore=tests/test_main.py tests/
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v4.5.0
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true

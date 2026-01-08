@@ -1,11 +1,12 @@
 import datetime
-from typing import Any, Callable, Dict, Literal, Optional
 from dataclasses import dataclass
+from typing import Any, Callable, Literal, Optional
+
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 
-from .error import SpiceAIError
 from .config import SPICE_USER_AGENT
+from .error import SpiceAIError
 
 
 @dataclass
@@ -14,7 +15,7 @@ class RefreshOpts:
     refresh_mode: Optional[str] = None
     refresh_jitter_max: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "refresh_sql": self.refresh_sql,
             "refresh_mode": self.refresh_mode,
@@ -26,7 +27,7 @@ HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
 
 
 class HttpRequests:
-    def __init__(self, base_url: str, headers: Dict[str, str]) -> None:
+    def __init__(self, base_url: str, headers: dict[str, str]) -> None:
         self.session = self._create_session(headers)
 
         # set the user-agent header
@@ -41,8 +42,8 @@ class HttpRequests:
         self,
         method: HttpMethod,
         path: str,
-        param: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, Any]] = None,
+        param: Optional[dict[str, Any]] = None,
+        headers: Optional[dict[str, Any]] = None,
         body: Optional[str] = None,
     ) -> Any:
         if headers is None:
@@ -50,7 +51,7 @@ class HttpRequests:
 
         headers.update(self.session.headers)
 
-        response: Response = self._operation(method)(
+        response: Response = self._operation(method)(  # type: ignore[call-arg]
             url=f"{self.base_url}{path}",
             data=body,
             params=self.prepare_param(param.copy()) if param is not None else None,
@@ -60,7 +61,7 @@ class HttpRequests:
         response.raise_for_status()
         return response.json()
 
-    def prepare_param(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():
             if isinstance(val, datetime.timedelta):
                 params[k] = timedelta_to_duration_str(val)
@@ -68,7 +69,7 @@ class HttpRequests:
                 params[k] = int(val.timestamp())
         return params
 
-    def _operation(self, method: HttpMethod) -> Callable[[], Response]:
+    def _operation(self, method: HttpMethod) -> Callable[..., Response]:
         if method == "GET":
             _call = self.session.get
         elif method == "POST":
@@ -83,9 +84,9 @@ class HttpRequests:
             raise SpiceAIError(f"{method} is not a valid HTTP operation")
         return _call
 
-    def _create_session(self, headers: Dict[str, str]) -> Session:
+    def _create_session(self, headers: dict[str, str]) -> Session:
         sess = Session()
-        sess.headers = headers
+        sess.headers = headers  # type: ignore[assignment]
         sess.mount(
             "https://",
             HTTPAdapter(

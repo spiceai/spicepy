@@ -39,10 +39,10 @@ def setup_package():
             "Development Status :: 4 - Beta",
             "Intended Audience :: Developers",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
+            "Programming Language :: Python :: 3.12",
             "Topic :: Software Development :: Libraries",
         ],
         keywords="spice, AI, web3, data, ML",
@@ -50,8 +50,14 @@ def setup_package():
         long_description_content_type="text/markdown",
         packages=["spicepy"],
         install_requires=parse_requirements("requirements.txt"),
-        extras_require={"test": parse_requirements("test.requirements.txt")},
-        python_requires=">=3.8",
+        extras_require={
+            "test": parse_requirements("test.requirements.txt"),
+            "params": [
+                "adbc-driver-flightsql>=1.0.0",
+                "adbc-driver-manager>=1.0.0",
+            ],
+        },
+        python_requires=">=3.9",
         platforms=["Any"],
     )
 
