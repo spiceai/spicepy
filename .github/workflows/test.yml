@@ -25,9 +25,9 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     name: Test pip install (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -44,9 +44,9 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     name: Unit tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -66,9 +66,9 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     name: Integration tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -167,9 +167,9 @@ jobs:
         python-version: ['3.12']
     name: Cloud tests (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -191,9 +191,9 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     name: Test coverage (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -205,7 +205,7 @@ jobs:
           pytest --cov=spicepy --cov-report=xml --cov-report=term-missing --ignore=tests/test_main.py tests/
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v4.5.0
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v4.5.0
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
