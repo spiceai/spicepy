@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -277,9 +278,6 @@ class TestClientQueryWithParams:
         mock_flight_class: MagicMock,
     ) -> None:
         """Test query_with_params creates ADBC client on first call."""
-        if not ADBC_AVAILABLE:
-            pytest.skip("ADBC not available")
-
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -304,9 +302,6 @@ class TestClientQueryWithParams:
         mock_flight_class: MagicMock,
     ) -> None:
         """Test query_with_params reuses ADBC client on subsequent calls."""
-        if not ADBC_AVAILABLE:
-            pytest.skip("ADBC not available")
-
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -322,6 +317,60 @@ class TestClientQueryWithParams:
 
         # Should only create client once
         assert mock_adbc_class.call_count == 1
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    @patch("spicepy._client._ADBCClient")
+    def test_query_with_params_passes_correct_args(
+        self,
+        mock_adbc_class: MagicMock,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        """Test query_with_params passes SQL and params to ADBC client."""
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_adbc = MagicMock()
+        mock_reader = MagicMock()
+        mock_adbc.query_with_params.return_value = mock_reader
+        mock_adbc_class.return_value = mock_adbc
+
+        client = Client(flight_url="grpc://localhost:50051", api_key="test-key")
+        result = client.query_with_params("SELECT * FROM t WHERE id = $1", [42])
+
+        mock_adbc.query_with_params.assert_called_once_with(
+            "SELECT * FROM t WHERE id = $1", [42]
+        )
+        assert result == mock_reader
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    @patch("spicepy._client._ADBCClient")
+    def test_ensure_adbc_client_passes_user_agent(
+        self,
+        mock_adbc_class: MagicMock,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        """Test _ensure_adbc_client passes user_agent to ADBC client."""
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_adbc = MagicMock()
+        mock_adbc.query_with_params.return_value = MagicMock()
+        mock_adbc_class.return_value = mock_adbc
+
+        client = Client(flight_url="grpc://localhost:50051", user_agent="custom-agent")
+        client.query_with_params("SELECT 1", [])
+
+        mock_adbc_class.assert_called_once_with(
+            uri="grpc://localhost:50051",
+            api_key="",
+            user_agent="custom-agent",
+        )
 
 
 class TestADBCClient:
@@ -618,9 +667,6 @@ class TestEdgeCases:
         mock_flight_class: MagicMock,
     ) -> None:
         """Test query_with_params with empty list."""
-        if not ADBC_AVAILABLE:
-            pytest.skip("ADBC not available")
-
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -634,3 +680,336 @@ class TestEdgeCases:
             client.query_with_params("SELECT 1", [])
 
             mock_adbc.query_with_params.assert_called_once_with("SELECT 1", [])
+
+
+class TestSpiceFlight:
+    """Test _SpiceFlight class."""
+
+    @patch("spicepy._client.flight")
+    def test_user_agent_default(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _user_agent static method with default user agent."""
+        from spicepy._client import _SpiceFlight
+        from spicepy.config import SPICE_USER_AGENT
+
+        result = _SpiceFlight._user_agent()
+
+        assert result[0] == b"user-agent"
+        assert result[1] == SPICE_USER_AGENT.encode()
+
+    @patch("spicepy._client.flight")
+    def test_user_agent_custom(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _user_agent static method with custom user agent."""
+        from spicepy._client import _SpiceFlight
+        from spicepy.config import SPICE_USER_AGENT
+
+        result = _SpiceFlight._user_agent("custom-agent")
+
+        assert result[0] == b"user-agent"
+        assert result[1] == f"custom-agent {SPICE_USER_AGENT}".encode()
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_init(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight initialization."""
+        from spicepy._client import _SpiceFlight
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+        mock_client.authenticate_basic_token.return_value = ("bearer", b"token")
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="",
+            tls_root_certs=b"cert",
+            user_agent=None,
+        )
+
+        mock_flight.connect.assert_called_once()
+        assert flight_instance._flight_client == mock_client
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_authenticate_with_api_key(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight authentication with API key."""
+        from spicepy._client import _SpiceFlight
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+        mock_client.authenticate_basic_token.return_value = ("bearer", b"token")
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="test-api-key",
+            tls_root_certs=b"cert",
+        )
+
+        mock_client.authenticate_basic_token.assert_called_with("", "test-api-key")
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_query_basic(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight.query method."""
+        from spicepy._client import _SpiceFlight, _ArrowFlightCallThread
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+
+        mock_flight_info = MagicMock()
+        mock_endpoint = MagicMock()
+        mock_ticket = MagicMock()
+        mock_endpoint.ticket = mock_ticket
+        mock_flight_info.endpoints = [mock_endpoint]
+        mock_client.get_flight_info.return_value = mock_flight_info
+
+        mock_reader = MagicMock()
+        mock_client.do_get.return_value = mock_reader
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="",
+            tls_root_certs=b"cert",
+        )
+
+        with patch.object(_ArrowFlightCallThread, "start"):
+            with patch.object(_ArrowFlightCallThread, "is_alive", return_value=False):
+                with patch.object(_ArrowFlightCallThread, "reader", mock_reader, create=True):
+                    result = flight_instance.query("SELECT 1")
+
+        mock_client.get_flight_info.assert_called_once()
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_query_with_timeout(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight.query with timeout parameter."""
+        from spicepy._client import _SpiceFlight, _ArrowFlightCallThread
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+
+        mock_flight_info = MagicMock()
+        mock_endpoint = MagicMock()
+        mock_ticket = MagicMock()
+        mock_endpoint.ticket = mock_ticket
+        mock_flight_info.endpoints = [mock_endpoint]
+        mock_client.get_flight_info.return_value = mock_flight_info
+
+        mock_reader = MagicMock()
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="",
+            tls_root_certs=b"cert",
+        )
+
+        with patch.object(_ArrowFlightCallThread, "start"):
+            with patch.object(_ArrowFlightCallThread, "is_alive", return_value=False):
+                with patch.object(_ArrowFlightCallThread, "reader", mock_reader, create=True):
+                    flight_instance.query("SELECT 1", timeout=60)
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_query_invalid_timeout_raises(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight.query with invalid timeout raises ValueError."""
+        from spicepy._client import _SpiceFlight
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="",
+            tls_root_certs=b"cert",
+        )
+
+        with pytest.raises(ValueError, match="Timeout must be a positive integer"):
+            flight_instance.query("SELECT 1", timeout=-1)
+
+        with pytest.raises(ValueError, match="Timeout must be a positive integer"):
+            flight_instance.query("SELECT 1", timeout=0)
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_query_reauthenticate_on_unauthenticated(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight.query re-authenticates on FlightUnauthenticatedError."""
+        from spicepy._client import _SpiceFlight, _ArrowFlightCallThread
+        from pyarrow._flight import FlightUnauthenticatedError
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+        mock_flight.FlightUnauthenticatedError = FlightUnauthenticatedError
+
+        mock_flight_info = MagicMock()
+        mock_endpoint = MagicMock()
+        mock_ticket = MagicMock()
+        mock_endpoint.ticket = mock_ticket
+        mock_flight_info.endpoints = [mock_endpoint]
+        mock_client.get_flight_info.return_value = mock_flight_info
+        mock_client.authenticate_basic_token.return_value = ("bearer", b"token")
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="test-key",
+            tls_root_certs=b"cert",
+        )
+
+        # First call raises unauthenticated, second succeeds
+        call_count = [0]
+        mock_reader = MagicMock()
+
+        def mock_threaded_do_get(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise FlightUnauthenticatedError("")
+            return mock_reader
+
+        with patch.object(flight_instance, "_threaded_flight_do_get", side_effect=mock_threaded_do_get):
+            result = flight_instance.query("SELECT 1")
+
+        assert result == mock_reader
+        # authenticate_basic_token called twice: once in init, once for re-auth
+        assert mock_client.authenticate_basic_token.call_count == 2
+
+    @patch("spicepy._client.flight")
+    def test_spice_flight_authenticate_without_api_key(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """Test _SpiceFlight authentication without API key."""
+        from spicepy._client import _SpiceFlight
+        from spicepy.config import SPICE_USER_AGENT
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key=None,
+            tls_root_certs=b"cert",
+        )
+
+        # authenticate_basic_token should not be called when api_key is None
+        mock_client.authenticate_basic_token.assert_not_called()
+        # Headers should only contain user-agent
+        assert len(flight_instance.headers) == 1
+        assert flight_instance.headers[0][0] == b"user-agent"
+
+
+class TestArrowFlightCallThread:
+    """Test _ArrowFlightCallThread class."""
+
+    def test_thread_run_success(self) -> None:
+        """Test _ArrowFlightCallThread.run with successful do_get."""
+        from spicepy._client import _ArrowFlightCallThread
+
+        mock_flight_client = MagicMock()
+        mock_ticket = MagicMock()
+        mock_options = MagicMock()
+        mock_reader = MagicMock()
+        mock_flight_client.do_get.return_value = mock_reader
+
+        thread = _ArrowFlightCallThread(
+            flight_client=mock_flight_client,
+            ticket=mock_ticket,
+            flight_options=mock_options,
+        )
+
+        thread.run()
+
+        assert thread.reader == mock_reader
+        mock_flight_client.do_get.assert_called_once_with(mock_ticket, mock_options)
+
+    def test_thread_run_exception(self) -> None:
+        """Test _ArrowFlightCallThread.run captures exception."""
+        from spicepy._client import _ArrowFlightCallThread
+
+        mock_flight_client = MagicMock()
+        mock_ticket = MagicMock()
+        mock_options = MagicMock()
+        mock_flight_client.do_get.side_effect = RuntimeError("Connection failed")
+
+        thread = _ArrowFlightCallThread(
+            flight_client=mock_flight_client,
+            ticket=mock_ticket,
+            flight_options=mock_options,
+        )
+
+        thread.run()
+
+        assert thread._exc is not None
+        assert isinstance(thread._exc, RuntimeError)
+
+    def test_thread_join_raises_exception(self) -> None:
+        """Test _ArrowFlightCallThread.join raises captured exception."""
+        from spicepy._client import _ArrowFlightCallThread
+
+        mock_flight_client = MagicMock()
+        mock_ticket = MagicMock()
+        mock_options = MagicMock()
+        mock_flight_client.do_get.side_effect = RuntimeError("Connection failed")
+
+        thread = _ArrowFlightCallThread(
+            flight_client=mock_flight_client,
+            ticket=mock_ticket,
+            flight_options=mock_options,
+        )
+
+        # Run the thread method to capture the exception
+        thread.run()
+
+        # Mock super().join to prevent "thread not started" error
+        with patch.object(threading.Thread, "join"):
+            with pytest.raises(RuntimeError, match="Connection failed"):
+                thread.join()
+
+
+class TestIsMacosArm64:
+    """Test is_macos_arm64 function."""
+
+    @patch("spicepy._client.platform")
+    def test_is_macos_arm64_true(self, mock_platform: MagicMock) -> None:
+        """Test is_macos_arm64 returns True on Apple Silicon."""
+        from spicepy._client import is_macos_arm64
+
+        mock_platform.platform.return_value = "macOS-14.0-arm64-arm-64bit"
+        mock_platform.machine.return_value = "arm64"
+
+        assert is_macos_arm64() is True
+
+    @patch("spicepy._client.platform")
+    def test_is_macos_arm64_false_linux(self, mock_platform: MagicMock) -> None:
+        """Test is_macos_arm64 returns False on Linux."""
+        from spicepy._client import is_macos_arm64
+
+        mock_platform.platform.return_value = "Linux-5.10.0-aarch64"
+        mock_platform.machine.return_value = "aarch64"
+
+        assert is_macos_arm64() is False
+
+    @patch("spicepy._client.platform")
+    def test_is_macos_arm64_false_intel_mac(self, mock_platform: MagicMock) -> None:
+        """Test is_macos_arm64 returns False on Intel Mac."""
+        from spicepy._client import is_macos_arm64
+
+        mock_platform.platform.return_value = "macOS-14.0-x86_64"
+        mock_platform.machine.return_value = "x86_64"
+
+        assert is_macos_arm64() is False
+

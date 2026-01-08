@@ -5,10 +5,37 @@ import time
 
 import pyarrow as pa
 import pytest
+import requests
 
 from spicepy import Client, RefreshOpts
 from spicepy.config import DEFAULT_LOCAL_FLIGHT_URL, DEFAULT_LOCAL_HTTP_URL, SPICE_USER_AGENT, get_user_agent
 from spicepy.params import infer_arrow_type
+
+
+def wait_for_ready(http_url: str = DEFAULT_LOCAL_HTTP_URL, timeout: int = 60, interval: float = 1.0) -> bool:
+    """Wait for the Spice runtime to be ready by polling the /v1/ready endpoint.
+
+    Args:
+        http_url: The base HTTP URL of the Spice runtime.
+        timeout: Maximum time to wait in seconds.
+        interval: Time between polling attempts in seconds.
+
+    Returns:
+        True if the runtime is ready, False if timeout is reached.
+    """
+    start_time = time.time()
+    ready_url = f"{http_url}/v1/ready"
+
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get(ready_url, timeout=5)
+            if response.status_code == 200:
+                return True
+        except requests.exceptions.RequestException:
+            pass  # Server not ready yet
+        time.sleep(interval)
+
+    return False
 
 
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
@@ -97,6 +124,7 @@ ORDER BY total_price DESC"""
 
 
 def test_local_runtime():
+    assert wait_for_ready(), "Spice runtime did not become ready in time"
     client = get_local_client()
     data = client.query("SELECT * FROM taxi_trips LIMIT 10")
     pandas_data = data.read_pandas()
@@ -104,6 +132,7 @@ def test_local_runtime():
 
 
 def test_local_runtime_refresh():
+    assert wait_for_ready(), "Spice runtime did not become ready in time"
     client = get_local_client()
     # basic refresh
     response = client.refresh_dataset("taxi_trips", None)
