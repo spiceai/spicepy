@@ -53,8 +53,8 @@ def setup_package():
         extras_require={
             "test": parse_requirements("test.requirements.txt"),
             "params": [
-                "adbc-driver-flightsql>=1.0.0",
-                "adbc-driver-manager>=1.0.0",
+                "adbc-driver-flightsql>=1.11.0",
+                "adbc-driver-manager>=1.11.0",
             ],
         },
         python_requires=">=3.9",
