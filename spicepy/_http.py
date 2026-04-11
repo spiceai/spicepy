@@ -1,6 +1,7 @@
 import datetime
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Literal
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
@@ -11,9 +12,9 @@ from .error import SpiceAIError
 
 @dataclass
 class RefreshOpts:
-    refresh_sql: Optional[str] = None
-    refresh_mode: Optional[str] = None
-    refresh_jitter_max: Optional[str] = None
+    refresh_sql: str | None = None
+    refresh_mode: str | None = None
+    refresh_jitter_max: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,9 +43,9 @@ class HttpRequests:
         self,
         method: HttpMethod,
         path: str,
-        param: Optional[dict[str, Any]] = None,
-        headers: Optional[dict[str, Any]] = None,
-        body: Optional[str] = None,
+        param: dict[str, Any] | None = None,
+        headers: dict[str, Any] | None = None,
+        body: str | None = None,
     ) -> Any:
         if headers is None:
             headers = {}

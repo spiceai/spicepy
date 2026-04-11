@@ -3,7 +3,7 @@ import os
 import platform
 import threading
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import certifi
 import pyarrow as pa
@@ -54,8 +54,8 @@ class _ADBCClient:
     def __init__(
         self,
         uri: str,
-        api_key: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        api_key: str | None = None,
+        user_agent: str | None = None,
     ):
         if not ADBC_AVAILABLE:
             raise ImportError(
@@ -120,7 +120,7 @@ class _ADBCClient:
 
         # Create parameter arrays (each with a single row)
         param_arrays = []
-        for value, arrow_type in zip(param_values, param_types):
+        for value, arrow_type in zip(param_values, param_types, strict=True):
             param_arrays.append(pa.array([value], type=arrow_type))
 
         # Create parameter schema with positional field names ($1, $2, etc.)
@@ -268,11 +268,11 @@ class Client:
     # pylint: disable=R0917
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,
         http_url: str = config.DEFAULT_HTTP_URL,
-        tls_root_cert: Union[str, Path, None] = None,
-        user_agent: Optional[str] = None,
+        tls_root_cert: str | Path | None = None,
+        user_agent: str | None = None,
     ):  # pylint: disable=R0913
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
         self._flight = _SpiceFlight(flight_url, api_key or "", tls_root_certs, user_agent)
@@ -280,7 +280,7 @@ class Client:
         self.api_key = api_key
         self._flight_url = flight_url
         self._user_agent = user_agent
-        self._adbc_client: Optional[_ADBCClient] = None
+        self._adbc_client: _ADBCClient | None = None
         self.http = HttpRequests(http_url, self._headers(user_agent))
 
     def _headers(self, user_agent=None) -> dict[str, str]:
@@ -373,7 +373,7 @@ class Client:
         adbc = self._ensure_adbc_client()
         return adbc.query_with_params(sql, params)
 
-    def refresh_dataset(self, dataset: str, refresh_opts: Optional[RefreshOpts] = None) -> Any:
+    def refresh_dataset(self, dataset: str, refresh_opts: RefreshOpts | None = None) -> Any:
         response = self.http.send_request(
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",
