@@ -546,7 +546,7 @@ def test_cloud_parameterized_query_aggregation():
     reader = client.query_with_params(
         """SELECT o_orderstatus,
                   COUNT(*) as order_count,
-                  AVG(o_totalprice) as avg_price,
+                  CAST(AVG(o_totalprice) AS DOUBLE) as avg_price,
                   SUM(o_totalprice) as total_price
            FROM tpch.orders
            WHERE o_orderstatus = $1
