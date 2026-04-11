@@ -1,6 +1,6 @@
-import datetime
 from collections.abc import Callable
 from dataclasses import dataclass
+import datetime
 from typing import Any, Literal
 
 from requests import Response, Session

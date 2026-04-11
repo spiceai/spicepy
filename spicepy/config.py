@@ -1,12 +1,13 @@
+from importlib.metadata import version
 import os
 import platform
-from importlib.metadata import version
-
 
 DEFAULT_FLIGHT_URL = os.environ.get("SPICE_FLIGHT_URL", "grpc+tls://flight.spiceai.io")
 DEFAULT_HTTP_URL = os.environ.get("SPICE_HTTP_URL", "https://data.spiceai.io")
 
-DEFAULT_LOCAL_FLIGHT_URL = os.environ.get("SPICE_LOCAL_FLIGHT_URL", "grpc://localhost:50051")
+DEFAULT_LOCAL_FLIGHT_URL = os.environ.get(
+    "SPICE_LOCAL_FLIGHT_URL", "grpc://localhost:50051"
+)
 DEFAULT_LOCAL_HTTP_URL = os.environ.get("SPICE_LOCAL_HTTP_URL", "http://localhost:8090")
 
 
@@ -19,7 +20,9 @@ DEFAULT_LOCAL_HTTP_URL = os.environ.get("SPICE_LOCAL_HTTP_URL", "http://localhos
 #   Default is the system information of the current system, e.g. `Linux/5.4.0-1043-aws x86_64`.
 ###
 def get_user_agent(
-    client_name: str | None = None, client_version: str | None = None, client_system: str | None = None
+    client_name: str | None = None,
+    client_version: str | None = None,
+    client_system: str | None = None,
 ) -> str:
     package_version = version("spicepy") if client_version is None else client_version
     system = platform.system()
@@ -28,7 +31,9 @@ def get_user_agent(
     if arch == "AMD64":
         arch = "x86_64"
 
-    system_info = f"{system}/{release} {arch}" if client_system is None else client_system
+    system_info = (
+        f"{system}/{release} {arch}" if client_system is None else client_system
+    )
     client = "spicepy" if client_name is None else client_name
     return f"{client}/{package_version} ({system_info})"
 

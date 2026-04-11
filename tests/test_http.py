@@ -40,7 +40,11 @@ class TestRefreshOpts:
 
     def test_with_all_options(self) -> None:
         """Test RefreshOpts with all options."""
-        opts = RefreshOpts(refresh_sql="SELECT * FROM table", refresh_mode="incremental", refresh_jitter_max="10s")
+        opts = RefreshOpts(
+            refresh_sql="SELECT * FROM table",
+            refresh_mode="incremental",
+            refresh_jitter_max="10s",
+        )
         assert opts.refresh_sql == "SELECT * FROM table"
         assert opts.refresh_mode == "incremental"
         assert opts.refresh_jitter_max == "10s"
@@ -57,7 +61,9 @@ class TestRefreshOpts:
 
     def test_to_dict_with_values(self) -> None:
         """Test RefreshOpts to_dict with values."""
-        opts = RefreshOpts(refresh_sql="SELECT 1", refresh_mode="full", refresh_jitter_max="1h")
+        opts = RefreshOpts(
+            refresh_sql="SELECT 1", refresh_mode="full", refresh_jitter_max="1h"
+        )
         d = opts.to_dict()
         assert d["refresh_sql"] == "SELECT 1"
         assert d["refresh_mode"] == "full"
@@ -149,7 +155,9 @@ class TestHttpRequestsInit:
         mock_session.headers = {}
         mock_session_class.return_value = mock_session
 
-        HttpRequests("http://example.com", {"X-API-Key": "secret", "Accept": "application/json"})
+        HttpRequests(
+            "http://example.com", {"X-API-Key": "secret", "Accept": "application/json"}
+        )
         # Should have the provided headers plus default user-agent
         assert mock_session.headers["X-API-Key"] == "secret"
         assert mock_session.headers["Accept"] == "application/json"
@@ -166,7 +174,9 @@ class TestHttpRequestsInit:
         assert mock_session.headers.get("user-agent") == SPICE_USER_AGENT
 
     @patch("spicepy._http.Session")
-    def test_init_preserves_custom_user_agent(self, mock_session_class: MagicMock) -> None:
+    def test_init_preserves_custom_user_agent(
+        self, mock_session_class: MagicMock
+    ) -> None:
         """Test HttpRequests preserves custom user agent."""
         mock_session = MagicMock()
         mock_session.headers = {"user-agent": "custom-agent"}
@@ -226,7 +236,12 @@ class TestHttpRequestsPrepareParam:
 
         http = HttpRequests("http://example.com", {})
         dt = datetime.datetime(2024, 1, 15, 12, 0, 0)
-        params = {"name": "test", "count": 10, "timestamp": dt, "duration": datetime.timedelta(minutes=5)}
+        params = {
+            "name": "test",
+            "count": 10,
+            "timestamp": dt,
+            "duration": datetime.timedelta(minutes=5),
+        }
         result = http.prepare_param(params)
         assert result["name"] == "test"
         assert result["count"] == 10
@@ -345,7 +360,9 @@ class TestHttpRequestsSendRequest:
         mock_session_class.return_value = mock_session
 
         http = HttpRequests("http://example.com", {})
-        result = http.send_request("GET", "/api/search", param={"q": "test", "limit": 10})
+        result = http.send_request(
+            "GET", "/api/search", param={"q": "test", "limit": 10}
+        )
 
         assert result == {"data": []}
 
@@ -364,7 +381,9 @@ class TestHttpRequestsSendRequest:
 
         # Verify headers were merged
         call_kwargs = mock_session.get.call_args
-        assert "X-Custom" in call_kwargs.kwargs.get("headers", {}) or "headers" in str(call_kwargs)
+        assert "X-Custom" in call_kwargs.kwargs.get("headers", {}) or "headers" in str(
+            call_kwargs
+        )
 
 
 class TestHttpRequestsRetryConfiguration:
@@ -372,7 +391,9 @@ class TestHttpRequestsRetryConfiguration:
 
     @patch("spicepy._http.Session")
     @patch("spicepy._http.HTTPAdapter")
-    def test_retry_adapter_mounted(self, mock_adapter_class: MagicMock, mock_session_class: MagicMock) -> None:
+    def test_retry_adapter_mounted(
+        self, mock_adapter_class: MagicMock, mock_session_class: MagicMock
+    ) -> None:
         """Test retry adapter is mounted for HTTPS."""
         mock_session = MagicMock()
         mock_session.headers = {}

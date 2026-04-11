@@ -62,7 +62,9 @@ class TestSpiceAIError:
 
     def test_error_with_special_characters(self) -> None:
         """Test SpiceAIError with special characters."""
-        msg = "Error: connection failed\nDetails: timeout at 10.0.0.1:50051\tRetry: true"
+        msg = (
+            "Error: connection failed\nDetails: timeout at 10.0.0.1:50051\tRetry: true"
+        )
         error = SpiceAIError(msg)
         assert error.message == msg
 
