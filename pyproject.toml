@@ -54,12 +54,12 @@ test = [
     "bandit>=1.7.8",
     "pandas>=2.0.0",
     "pyarrow>=18.0.0",
-    "adbc-driver-flightsql>=1.3.0",
-    "adbc-driver-manager>=1.3.0",
+    "adbc-driver-flightsql>=1.11.0",
+    "adbc-driver-manager>=1.11.0",
 ]
 params = [
-    "adbc-driver-flightsql>=1.3.0",
-    "adbc-driver-manager>=1.3.0",
+    "adbc-driver-flightsql>=1.11.0",
+    "adbc-driver-manager>=1.11.0",
 ]
 
 # ============== Tool Configuration ==============
