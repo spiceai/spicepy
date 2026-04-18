@@ -109,7 +109,6 @@ jobs:
         shell: wsl-bash {0}
         run: |
           curl https://install.spiceai.org | /bin/bash
-          echo "$HOME/.spice/bin" >> $GITHUB_PATH
           $HOME/.spice/bin/spice install
 
       - name: Init and start spice app
@@ -133,6 +132,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: wsl-bash {0}
         run: |
+          export PATH="$HOME/.spice/bin:$PATH"
           spice init spice_qs
           cd spice_qs
           spice add spiceai/quickstart
