@@ -18,24 +18,10 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
-      # Group minor/patch updates for dev dependencies
-      dev-dependencies:
+      # Group all Python dependency updates into a single PR
+      python-dependencies:
         patterns:
-          - "pytest*"
-          - "pylint"
-          - "flake8"
-          - "ruff"
-          - "mypy"
-          - "bandit"
-          - "types-*"
-          - "*-stubs"
-        update-types:
-          - "minor"
-          - "patch"
-      # Group ADBC driver updates
-      adbc:
-        patterns:
-          - "adbc-driver-*"
+          - "*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
