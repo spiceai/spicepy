@@ -91,16 +91,26 @@ jobs:
           brew install spiceai/spiceai/spice
           brew install spiceai/spiceai/spiced
 
-      - name: install Spice (Windows)
+      # Spice on Windows is only supported via WSL. Set up Ubuntu under WSL
+      # and install Spice there; the tests on the Windows host then talk to
+      # the runtime over localhost (WSL2 forwards localhost between host and
+      # guest).
+      - name: Set up WSL (Windows)
         if: matrix.os == 'windows-latest'
-        run: |
-          curl -L "https://install.spiceai.org/Install.ps1" -o Install.ps1 && PowerShell -ExecutionPolicy Bypass -File ./Install.ps1
+        uses: Vampire/setup-wsl@v6
+        with:
+          distribution: Ubuntu-24.04
+          additional-packages: |
+            curl
+            ca-certificates
 
-      - name: add Spice bin to PATH (Windows)
+      - name: install Spice in WSL (Windows)
         if: matrix.os == 'windows-latest'
+        shell: wsl-bash {0}
         run: |
-          Add-Content $env:GITHUB_PATH (Join-Path $HOME ".spice\bin")
-        shell: pwsh
+          curl https://install.spiceai.org | /bin/bash
+          echo "$HOME/.spice/bin" >> $GITHUB_PATH
+          $HOME/.spice/bin/spice install
 
       - name: Init and start spice app
         if: matrix.os != 'windows-latest'
@@ -121,44 +131,25 @@ jobs:
 
       - name: Init and start spice app (Windows)
         if: matrix.os == 'windows-latest'
+        shell: wsl-bash {0}
         run: |
-          spice install
           spice init spice_qs
           cd spice_qs
           spice add spiceai/quickstart
-          # Use spiced directly; `spice run` on Windows has a bug where it
-          # reinstalls the runtime and then fails to locate it.
-          $spiced = Join-Path $HOME ".spice\bin\spiced.exe"
-          if (-not (Test-Path $spiced)) {
-            throw "spiced not found at $spiced after `spice install`"
-          }
-          Start-Process -FilePath $spiced -RedirectStandardOutput spice.out.log -RedirectStandardError spice.err.log
+          nohup spiced > spice.log 2>&1 &
           # Wait for runtime to be ready (poll /v1/ready endpoint)
-          $timeout = 120
-          $elapsed = 0
-          $ready = $false
-          while ($elapsed -lt $timeout) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://localhost:8090/v1/ready" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "Spice runtime is ready"
-                $ready = $true
-                break
-              }
-            } catch {
-              Write-Host "Waiting for Spice runtime to be ready... ($elapsed/$timeout)"
-            }
-            Start-Sleep -Seconds 1
-            $elapsed++
-          }
-          if (-not $ready) {
-            Write-Host "=== spice stdout log ==="
-            if (Test-Path spice.out.log) { Get-Content spice.out.log }
-            Write-Host "=== spice stderr log ==="
-            if (Test-Path spice.err.log) { Get-Content spice.err.log }
-            throw "Spice runtime did not become ready within $timeout seconds"
-          }
-        shell: pwsh
+          for i in $(seq 1 120); do
+            if curl -s http://localhost:8090/v1/ready > /dev/null 2>&1; then
+              echo "Spice runtime is ready"
+              exit 0
+            fi
+            echo "Waiting for Spice runtime to be ready... ($i/120)"
+            sleep 1
+          done
+          echo "=== spice log ==="
+          cat spice.log || true
+          echo "Spice runtime did not become ready within 120 seconds"
+          exit 1
 
       - name: Running tests
         env:
@@ -176,16 +167,12 @@ jobs:
           cat spice.log
 
       - name: Stop spice and check logs (Windows)
-        working-directory: spice_qs
         if: matrix.os == 'windows-latest' && always()
+        shell: wsl-bash {0}
         run: |
-          Get-Process -Name spice -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Get-Process -Name spiced -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Write-Host "=== spice stdout log ==="
-          if (Test-Path spice.out.log) { Get-Content spice.out.log }
-          Write-Host "=== spice stderr log ==="
-          if (Test-Path spice.err.log) { Get-Content spice.err.log }
-        shell: pwsh
+          pkill -f spiced || true
+          echo "=== spice log ==="
+          cat spice_qs/spice.log || true
 
   pytest-cloud:
     runs-on: ubuntu-latest
