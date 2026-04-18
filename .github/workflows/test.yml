@@ -126,7 +126,13 @@ jobs:
           spice init spice_qs
           cd spice_qs
           spice add spiceai/quickstart
-          Start-Process -FilePath spice -ArgumentList 'run' -RedirectStandardOutput spice.out.log -RedirectStandardError spice.err.log
+          # Use spiced directly; `spice run` on Windows has a bug where it
+          # reinstalls the runtime and then fails to locate it.
+          $spiced = Join-Path $HOME ".spice\bin\spiced.exe"
+          if (-not (Test-Path $spiced)) {
+            throw "spiced not found at $spiced after `spice install`"
+          }
+          Start-Process -FilePath $spiced -RedirectStandardOutput spice.out.log -RedirectStandardError spice.err.log
           # Wait for runtime to be ready (poll /v1/ready endpoint)
           $timeout = 120
           $elapsed = 0
