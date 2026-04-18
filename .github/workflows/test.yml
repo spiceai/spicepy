@@ -125,15 +125,17 @@ jobs:
           spice init spice_qs
           cd spice_qs
           spice add spiceai/quickstart
-          Start-Process -FilePath spice run
+          Start-Process -FilePath spice -ArgumentList 'run' -RedirectStandardOutput spice.out.log -RedirectStandardError spice.err.log
           # Wait for runtime to be ready (poll /v1/ready endpoint)
-          $timeout = 60
+          $timeout = 120
           $elapsed = 0
+          $ready = $false
           while ($elapsed -lt $timeout) {
             try {
               $response = Invoke-WebRequest -Uri "http://localhost:8090/v1/ready" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 Write-Host "Spice runtime is ready"
+                $ready = $true
                 break
               }
             } catch {
@@ -141,6 +143,13 @@ jobs:
             }
             Start-Sleep -Seconds 1
             $elapsed++
+          }
+          if (-not $ready) {
+            Write-Host "=== spice stdout log ==="
+            if (Test-Path spice.out.log) { Get-Content spice.out.log }
+            Write-Host "=== spice stderr log ==="
+            if (Test-Path spice.err.log) { Get-Content spice.err.log }
+            throw "Spice runtime did not become ready within $timeout seconds"
           }
         shell: pwsh
 
@@ -158,6 +167,18 @@ jobs:
         run: |
           killall spice || true
           cat spice.log
+
+      - name: Stop spice and check logs (Windows)
+        working-directory: spice_qs
+        if: matrix.os == 'windows-latest' && always()
+        run: |
+          Get-Process -Name spice -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Get-Process -Name spiced -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host "=== spice stdout log ==="
+          if (Test-Path spice.out.log) { Get-Content spice.out.log }
+          Write-Host "=== spice stderr log ==="
+          if (Test-Path spice.err.log) { Get-Content spice.err.log }
+        shell: pwsh
 
   pytest-cloud:
     runs-on: ubuntu-latest
