@@ -250,5 +250,5 @@ skips = ["B101"]  # assert_used
 
 [dependency-groups]
 dev = [
-    "build>=1.4.3",
+    "build>=1.4.4",
 ]
