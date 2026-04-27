@@ -18,5 +18,5 @@ pandas-stubs>=2.0.0
 # Security scanning
 bandit>=1.7.8
 # Runtime dependencies (needed for tests)
-pyarrow>=17.0.0
+pyarrow>=24.0.0
 pandas>=2.0.0
