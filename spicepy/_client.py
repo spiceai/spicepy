@@ -1,9 +1,9 @@
 import json
 import os
+from pathlib import Path
 import platform
 import threading
-from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import certifi
 import pyarrow as pa
@@ -21,7 +21,10 @@ from .params import infer_arrow_type
 
 
 def is_macos_arm64() -> bool:
-    return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
+    return (
+        platform.platform().lower().startswith("macos")
+        and platform.machine() == "arm64"
+    )
 
 
 try:
@@ -54,8 +57,8 @@ class _ADBCClient:
     def __init__(
         self,
         uri: str,
-        api_key: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        api_key: str | None = None,
+        user_agent: str | None = None,
     ):
         if not ADBC_AVAILABLE:
             raise ImportError(
@@ -85,7 +88,9 @@ class _ADBCClient:
         # Add authentication if API key provided
         if self._api_key:
             db_kwargs[adbc_driver_manager.DatabaseOptions.USERNAME.value] = ""
-            db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = self._api_key
+            db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = (
+                self._api_key
+            )
 
         # Create low-level database and connection (avoids dbapi autocommit warning)
         self._db = adbc_driver_flightsql.connect(self._uri, db_kwargs=db_kwargs)
@@ -110,7 +115,11 @@ class _ADBCClient:
 
         for param in params:
             # Check if param is a tuple of (value, arrow_type)
-            if isinstance(param, tuple) and len(param) == 2 and isinstance(param[1], pa.DataType):
+            if (
+                isinstance(param, tuple)
+                and len(param) == 2
+                and isinstance(param[1], pa.DataType)
+            ):
                 value, arrow_type = param
                 param_values.append(value)
                 param_types.append(arrow_type)
@@ -120,11 +129,13 @@ class _ADBCClient:
 
         # Create parameter arrays (each with a single row)
         param_arrays = []
-        for value, arrow_type in zip(param_values, param_types):
+        for value, arrow_type in zip(param_values, param_types, strict=True):
             param_arrays.append(pa.array([value], type=arrow_type))
 
         # Create parameter schema with positional field names ($1, $2, etc.)
-        param_fields = [pa.field(f"${i + 1}", param_types[i]) for i in range(len(params))]
+        param_fields = [
+            pa.field(f"${i + 1}", param_types[i]) for i in range(len(params))
+        ]
         param_schema = pa.schema(param_fields)
 
         return pa.record_batch(param_arrays, schema=param_schema)
@@ -189,7 +200,11 @@ class _Cert:
         tls_root_cert,
     ):
         if tls_root_cert is not None:
-            tls_root_cert = tls_root_cert if isinstance(tls_root_cert, Path) else Path(tls_root_cert)
+            tls_root_cert = (
+                tls_root_cert
+                if isinstance(tls_root_cert, Path)
+                else Path(tls_root_cert)
+            )
         else:
             tls_root_cert = Path(certifi.where())
 
@@ -208,14 +223,19 @@ class _SpiceFlight:
 
         # Prepend the custom user agent (if provided) to the default user agent
         if custom_user_agent:
-            return (str.encode("user-agent"), str.encode(f"{custom_user_agent} {config.SPICE_USER_AGENT}"))
+            return (
+                str.encode("user-agent"),
+                str.encode(f"{custom_user_agent} {config.SPICE_USER_AGENT}"),
+            )
         return (str.encode("user-agent"), str.encode(config.SPICE_USER_AGENT))
 
     def __init__(self, grpc: str, api_key: str, tls_root_certs, user_agent=None):
         self._flight_client = flight.connect(grpc, tls_root_certs=tls_root_certs)
         self._api_key = api_key
         self.headers = [_SpiceFlight._user_agent(user_agent)]
-        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+        self._flight_options = flight.FlightCallOptions(
+            headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+        )
         self._authenticate()
 
     def _authenticate(self):
@@ -224,10 +244,14 @@ class _SpiceFlight:
                 self._flight_client.authenticate_basic_token("", self._api_key),
                 _SpiceFlight._user_agent(),
             ]
-            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+            self._flight_options = flight.FlightCallOptions(
+                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+            )
         else:
             self.headers = [_SpiceFlight._user_agent()]
-            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
+            self._flight_options = flight.FlightCallOptions(
+                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+            )
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout")
@@ -235,19 +259,27 @@ class _SpiceFlight:
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
+            self._flight_options = flight.FlightCallOptions(
+                headers=self.headers, timeout=timeout
+            )
 
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options
         )
 
         try:
-            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(
+                ticket=flight_info.endpoints[0].ticket
+            )
         except flight.FlightUnauthenticatedError:
             self._authenticate()
-            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
+            reader = self._threaded_flight_do_get(
+                ticket=flight_info.endpoints[0].ticket
+            )
         except flight.FlightTimedOutError as exc:
-            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
+            raise TimeoutError(
+                f"Query timed out and was canceled after {timeout} seconds."
+            ) from exc
 
         return reader
 
@@ -268,19 +300,21 @@ class Client:
     # pylint: disable=R0917
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,
         http_url: str = config.DEFAULT_HTTP_URL,
-        tls_root_cert: Union[str, Path, None] = None,
-        user_agent: Optional[str] = None,
+        tls_root_cert: str | Path | None = None,
+        user_agent: str | None = None,
     ):  # pylint: disable=R0913
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
-        self._flight = _SpiceFlight(flight_url, api_key or "", tls_root_certs, user_agent)
+        self._flight = _SpiceFlight(
+            flight_url, api_key or "", tls_root_certs, user_agent
+        )
 
         self.api_key = api_key
         self._flight_url = flight_url
         self._user_agent = user_agent
-        self._adbc_client: Optional[_ADBCClient] = None
+        self._adbc_client: _ADBCClient | None = None
         self.http = HttpRequests(http_url, self._headers(user_agent))
 
     def _headers(self, user_agent=None) -> dict[str, str]:
@@ -369,15 +403,23 @@ class Client:
             ValueError: If params is None
         """
         if params is None:
-            raise ValueError("params must be a list, not None. Use [] for queries without parameters.")
+            raise ValueError(
+                "params must be a list, not None. Use [] for queries without parameters."
+            )
         adbc = self._ensure_adbc_client()
         return adbc.query_with_params(sql, params)
 
-    def refresh_dataset(self, dataset: str, refresh_opts: Optional[RefreshOpts] = None) -> Any:
+    def refresh_dataset(
+        self, dataset: str, refresh_opts: RefreshOpts | None = None
+    ) -> Any:
         response = self.http.send_request(
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",
-            body=(json.dumps(refresh_opts.to_dict()) if refresh_opts is not None else json.dumps({})),
+            body=(
+                json.dumps(refresh_opts.to_dict())
+                if refresh_opts is not None
+                else json.dumps({})
+            ),
             headers={"Content-Type": "application/json"},
         )
 

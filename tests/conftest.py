@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Generator
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ============== Markers ==============
 
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers."""
-    config.addinivalue_line("markers", "unit: Unit tests that don't require external services")
-    config.addinivalue_line("markers", "integration: Integration tests that require Spice runtime")
-    config.addinivalue_line("markers", "cloud: Tests that require Spice.ai cloud connection")
+    config.addinivalue_line(
+        "markers", "unit: Unit tests that don't require external services"
+    )
+    config.addinivalue_line(
+        "markers", "integration: Integration tests that require Spice runtime"
+    )
+    config.addinivalue_line(
+        "markers", "cloud: Tests that require Spice.ai cloud connection"
+    )
     config.addinivalue_line("markers", "slow: Tests that take a long time to run")
 
 
@@ -55,7 +60,9 @@ def is_adbc_available() -> bool:
         return False
 
 
-skip_if_no_adbc = pytest.mark.skipif(not is_adbc_available(), reason="ADBC driver not installed")
+skip_if_no_adbc = pytest.mark.skipif(
+    not is_adbc_available(), reason="ADBC driver not installed"
+)
 
 
 # ============== Mock Fixtures ==============

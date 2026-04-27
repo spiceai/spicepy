@@ -8,11 +8,18 @@ import pytest
 import requests
 
 from spicepy import Client, RefreshOpts
-from spicepy.config import DEFAULT_LOCAL_FLIGHT_URL, DEFAULT_LOCAL_HTTP_URL, SPICE_USER_AGENT, get_user_agent
+from spicepy.config import (
+    DEFAULT_LOCAL_FLIGHT_URL,
+    DEFAULT_LOCAL_HTTP_URL,
+    SPICE_USER_AGENT,
+    get_user_agent,
+)
 from spicepy.params import infer_arrow_type
 
 
-def wait_for_ready(http_url: str = DEFAULT_LOCAL_HTTP_URL, timeout: int = 60, interval: float = 1.0) -> bool:
+def wait_for_ready(
+    http_url: str = DEFAULT_LOCAL_HTTP_URL, timeout: int = 60, interval: float = 1.0
+) -> bool:
     """Wait for the Spice runtime to be ready by polling the /v1/ready endpoint.
 
     Args:
@@ -41,7 +48,9 @@ def wait_for_ready(http_url: str = DEFAULT_LOCAL_HTTP_URL, timeout: int = 60, in
 # Skip cloud tests if TEST_SPICE_CLOUD is not set to true
 def skip_cloud():
     skip = os.environ.get("TEST_SPICE_CLOUD") != "true"
-    return pytest.mark.skipif(skip, reason="Cloud tests disabled (set TEST_SPICE_CLOUD=true)")
+    return pytest.mark.skipif(
+        skip, reason="Cloud tests disabled (set TEST_SPICE_CLOUD=true)"
+    )
 
 
 def get_cloud_client():
@@ -173,9 +182,12 @@ def test_local_runtime_refresh():
 def test_user_agent(httpserver):
     reply = {"message": "OK"}
     httpserver.expect_request(
-        "/v1/datasets/test/acceleration/refresh", headers={"User-Agent": SPICE_USER_AGENT}
+        "/v1/datasets/test/acceleration/refresh",
+        headers={"User-Agent": SPICE_USER_AGENT},
     ).respond_with_data(json.dumps(reply), content_type="application/json")
-    client = Client(flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=httpserver.url_for("/"))
+    client = Client(
+        flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=httpserver.url_for("/")
+    )
     response = client.refresh_dataset("test")
     httpserver.check_assertions()
     assert response == reply
@@ -183,16 +195,25 @@ def test_user_agent(httpserver):
     httpserver.expect_request(
         "/v1/datasets/test/acceleration/refresh", headers={"User-Agent": "custom-agent"}
     ).respond_with_data(json.dumps(reply), content_type="application/json")
-    client = Client(flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=httpserver.url_for("/"), user_agent="custom-agent")
+    client = Client(
+        flight_url=DEFAULT_LOCAL_FLIGHT_URL,
+        http_url=httpserver.url_for("/"),
+        user_agent="custom-agent",
+    )
     response = client.refresh_dataset("test")
     httpserver.check_assertions()
     assert response == reply
 
     custom_ua = get_user_agent("custom-client", "1.0.0", "custom-system")
     httpserver.expect_request(
-        "/v1/datasets/test/acceleration/refresh", headers={"User-Agent": "custom-client/1.0.0 (custom-system)"}
+        "/v1/datasets/test/acceleration/refresh",
+        headers={"User-Agent": "custom-client/1.0.0 (custom-system)"},
     ).respond_with_data(json.dumps(reply), content_type="application/json")
-    client = Client(flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=httpserver.url_for("/"), user_agent=custom_ua)
+    client = Client(
+        flight_url=DEFAULT_LOCAL_FLIGHT_URL,
+        http_url=httpserver.url_for("/"),
+        user_agent=custom_ua,
+    )
     response = client.refresh_dataset("test")
     httpserver.check_assertions()
     assert response == reply
@@ -323,7 +344,8 @@ def test_parameterized_query_with_explicit_types():
     client = get_local_client()
 
     reader = client.query_with_params(
-        "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 LIMIT 5", [(10.0, pa.float64())]
+        "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 LIMIT 5",
+        [(10.0, pa.float64())],
     )
 
     total_rows = 0
@@ -355,7 +377,9 @@ def test_parameterized_query_no_params():
     """Test parameterized query method with no parameters (regular query)."""
     client = get_local_client()
 
-    reader = client.query_with_params("SELECT trip_distance, fare_amount FROM taxi_trips LIMIT 5", [])
+    reader = client.query_with_params(
+        "SELECT trip_distance, fare_amount FROM taxi_trips LIMIT 5", []
+    )
 
     total_rows = 0
     for batch in reader:
@@ -522,7 +546,7 @@ def test_cloud_parameterized_query_aggregation():
     reader = client.query_with_params(
         """SELECT o_orderstatus,
                   COUNT(*) as order_count,
-                  AVG(o_totalprice) as avg_price,
+                  CAST(AVG(o_totalprice) AS DOUBLE) as avg_price,
                   SUM(o_totalprice) as total_price
            FROM tpch.orders
            WHERE o_orderstatus = $1

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-import threading
 from pathlib import Path
+import threading
 from unittest.mock import MagicMock, patch
 
 import pyarrow as pa
@@ -98,7 +98,10 @@ class TestClientInit:
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
 
-        client = Client(flight_url="grpc+tls://custom.spiceai.io", http_url="https://custom-data.spiceai.io")
+        client = Client(
+            flight_url="grpc+tls://custom.spiceai.io",
+            http_url="https://custom-data.spiceai.io",
+        )
 
         assert client._flight_url == "grpc+tls://custom.spiceai.io"
 
@@ -340,7 +343,9 @@ class TestClientQueryWithParams:
         client = Client(flight_url="grpc://localhost:50051", api_key="test-key")
         result = client.query_with_params("SELECT * FROM t WHERE id = $1", [42])
 
-        mock_adbc.query_with_params.assert_called_once_with("SELECT * FROM t WHERE id = $1", [42])
+        mock_adbc.query_with_params.assert_called_once_with(
+            "SELECT * FROM t WHERE id = $1", [42]
+        )
         assert result == mock_reader
 
     @patch("spicepy._client._SpiceFlight")
@@ -781,7 +786,9 @@ class TestSpiceFlight:
         )
 
         # Mock the _threaded_flight_do_get method directly
-        with patch.object(flight_instance, "_threaded_flight_do_get", return_value=mock_reader):
+        with patch.object(
+            flight_instance, "_threaded_flight_do_get", return_value=mock_reader
+        ):
             result = flight_instance.query("SELECT 1")
 
         assert result is mock_reader
@@ -814,7 +821,9 @@ class TestSpiceFlight:
         )
 
         # Mock the _threaded_flight_do_get method directly
-        with patch.object(flight_instance, "_threaded_flight_do_get", return_value=mock_reader):
+        with patch.object(
+            flight_instance, "_threaded_flight_do_get", return_value=mock_reader
+        ):
             flight_instance.query("SELECT 1", timeout=60)
 
     @patch("spicepy._client.flight")
@@ -878,7 +887,9 @@ class TestSpiceFlight:
                 raise FlightUnauthenticatedError("")
             return mock_reader
 
-        with patch.object(flight_instance, "_threaded_flight_do_get", side_effect=mock_threaded_do_get):
+        with patch.object(
+            flight_instance, "_threaded_flight_do_get", side_effect=mock_threaded_do_get
+        ):
             result = flight_instance.query("SELECT 1")
 
         assert result == mock_reader
