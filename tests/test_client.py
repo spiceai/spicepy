@@ -1017,6 +1017,202 @@ class TestArrowFlightCallThread:
                 thread.join()
 
 
+class TestClientQueryHelpers:
+    """Test Client query_arrow / query_pandas / query_polars / query_pylist."""
+
+    @staticmethod
+    def _sample_table() -> pa.Table:
+        return pa.table({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_arrow_returns_table(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        table = self._sample_table()
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = table
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        result = client.query_arrow("SELECT * FROM t")
+
+        assert result is table
+        mock_flight.query.assert_called_once_with("SELECT * FROM t")
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_arrow_passes_timeout(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = self._sample_table()
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        client.query_arrow("SELECT 1", timeout=30)
+
+        mock_flight.query.assert_called_once_with("SELECT 1", timeout=30)
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    @patch("spicepy._client._ADBCClient")
+    def test_query_arrow_routes_params_to_adbc(
+        self,
+        mock_adbc_class: MagicMock,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        table = self._sample_table()
+        adbc_reader = MagicMock()
+        adbc_reader.read_all.return_value = table
+        mock_adbc = MagicMock()
+        mock_adbc.query_with_params.return_value = adbc_reader
+        mock_adbc_class.return_value = mock_adbc
+
+        flight_instance = MagicMock()
+        mock_flight_class.return_value = flight_instance
+
+        client = Client()
+        result = client.query_arrow("SELECT * FROM t WHERE id = $1", params=[1])
+
+        assert result is table
+        mock_adbc.query_with_params.assert_called_once_with(
+            "SELECT * FROM t WHERE id = $1", [1]
+        )
+        flight_instance.query.assert_not_called()
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_pandas_returns_dataframe(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        import pandas as pd
+
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = self._sample_table()
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        df = client.query_pandas("SELECT * FROM t")
+
+        assert isinstance(df, pd.DataFrame)
+        assert list(df.columns) == ["id", "name"]
+        assert len(df) == 3
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_pylist_returns_row_dicts(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = self._sample_table()
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        rows = client.query_pylist("SELECT * FROM t")
+
+        assert rows == [
+            {"id": 1, "name": "a"},
+            {"id": 2, "name": "b"},
+            {"id": 3, "name": "c"},
+        ]
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_polars_returns_dataframe(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        pl = pytest.importorskip("polars")
+
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = self._sample_table()
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        df = client.query_polars("SELECT * FROM t")
+
+        assert isinstance(df, pl.DataFrame)
+        assert df.columns == ["id", "name"]
+        assert df.height == 3
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_polars_missing_raises_importerror(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = self._sample_table()
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "polars":
+                raise ImportError("No module named 'polars'")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            with pytest.raises(ImportError, match="polars is not installed"):
+                client.query_polars("SELECT 1")
+
+
 class TestIsMacosArm64:
     """Test is_macos_arm64 function."""
 

@@ -56,10 +56,14 @@ test = [
     "pyarrow>=23.0.1",
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
+    "polars>=1.0.0",
 ]
 params = [
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
+]
+polars = [
+    "polars>=1.0.0",
 ]
 
 # ============== Tool Configuration ==============
@@ -93,6 +97,8 @@ module = [
     "adbc_driver_manager.*",
     "certifi",
     "pandas",
+    "polars",
+    "polars.*",
     "_pytest.*",
     "pytest.*",
 ]

@@ -3,10 +3,14 @@ import os
 from pathlib import Path
 import platform
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import certifi
 import pyarrow as pa
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
 
 # pylint: disable=E0611
 from pyarrow._flight import (
@@ -408,6 +412,91 @@ class Client:
             )
         adbc = self._ensure_adbc_client()
         return adbc.query_with_params(sql, params)
+
+    def _read_table(
+        self,
+        sql: str,
+        params: list[Any] | None,
+        timeout: int | None,
+    ) -> pa.Table:
+        if params is not None:
+            return self.query_with_params(sql, params).read_all()
+        kwargs: dict[str, Any] = {}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return self.query(sql, **kwargs).read_all()
+
+    def query_arrow(
+        self,
+        sql: str,
+        *,
+        params: list[Any] | None = None,
+        timeout: int | None = None,
+    ) -> pa.Table:
+        """Execute a SQL query and return results as a PyArrow Table.
+
+        Args:
+            sql: SQL query string. Use $1, $2, ... placeholders if passing params.
+            params: Optional list of parameter values. When provided, the query is
+                executed via ADBC FlightSQL with prepared statements. See
+                :meth:`query_with_params` for parameter format.
+            timeout: Optional query timeout in seconds (ignored when params is set).
+
+        Returns:
+            Arrow Table with all query results materialized in memory.
+        """
+        return self._read_table(sql, params, timeout)
+
+    def query_pandas(
+        self,
+        sql: str,
+        *,
+        params: list[Any] | None = None,
+        timeout: int | None = None,
+    ) -> "pd.DataFrame":
+        """Execute a SQL query and return results as a pandas DataFrame.
+
+        See :meth:`query_arrow` for argument semantics.
+        """
+        return cast("pd.DataFrame", self._read_table(sql, params, timeout).to_pandas())
+
+    def query_polars(
+        self,
+        sql: str,
+        *,
+        params: list[Any] | None = None,
+        timeout: int | None = None,
+    ) -> "pl.DataFrame":
+        """Execute a SQL query and return results as a polars DataFrame.
+
+        Requires the optional ``polars`` dependency:
+        ``pip install spicepy[polars]``.
+
+        See :meth:`query_arrow` for argument semantics.
+        """
+        try:
+            import polars as pl
+        except ImportError as exc:
+            raise ImportError(
+                "polars is not installed. Install it with: pip install spicepy[polars]"
+            ) from exc
+        return cast("pl.DataFrame", pl.from_arrow(self._read_table(sql, params, timeout)))
+
+    def query_pylist(
+        self,
+        sql: str,
+        *,
+        params: list[Any] | None = None,
+        timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Execute a SQL query and return results as a list of row dicts.
+
+        See :meth:`query_arrow` for argument semantics.
+        """
+        return cast(
+            "list[dict[str, Any]]",
+            self._read_table(sql, params, timeout).to_pylist(),
+        )
 
     def refresh_dataset(
         self, dataset: str, refresh_opts: RefreshOpts | None = None
