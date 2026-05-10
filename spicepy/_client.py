@@ -480,7 +480,9 @@ class Client:
             raise ImportError(
                 "polars is not installed. Install it with: pip install spicepy[polars]"
             ) from exc
-        return cast("pl.DataFrame", pl.from_arrow(self._read_table(sql, params, timeout)))
+        return cast(
+            "pl.DataFrame", pl.from_arrow(self._read_table(sql, params, timeout))
+        )
 
     def query_pylist(
         self,
