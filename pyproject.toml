@@ -260,7 +260,10 @@ directory = "htmlcov"
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
-skips = ["B101"]  # assert_used
+skips = [
+    "B101",  # assert_used
+    "B608",  # hardcoded_sql_expressions: composing SQL with escaped identifiers/literals is this package's job
+]
 
 [dependency-groups]
 dev = [
