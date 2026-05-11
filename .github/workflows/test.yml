@@ -107,6 +107,8 @@ jobs:
       - name: install Spice in WSL (Windows)
         if: matrix.os == 'windows-latest'
         shell: wsl-bash {0}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl https://install.spiceai.org | /bin/bash
           $HOME/.spice/bin/spice install
