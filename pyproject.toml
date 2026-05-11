@@ -11,9 +11,9 @@ license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
     "pyarrow>=24.0.0",
-    "pandas>=3.0.2",
+    "pandas>=3.0.3",
     "certifi>=2026.4.22",
-    "requests>=2.33.1",
+    "requests>=2.34.0",
 ]
 authors = [
     {name = "Spice AI, Inc.", email = "webmaster@spice.ai"}
@@ -42,28 +42,28 @@ test = [
     "pylint>=4.0.5",
     "flake8>=7.3.0",
     "ruff>=0.15.12",
-    "mypy>=1.20.2",
+    "mypy>=2.1.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "pytest-timeout>=2.4.0",
     "pytest_httpserver==1.1.5",
-    "types-requests>=2.33.0.20260408",
+    "types-requests>=2.33.0.20260508",
     "pandas-stubs>=3.0.0.260204",
     "black>=26.3.1",
     "bandit>=1.9.4",
-    "pandas>=3.0.2",
+    "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
-    "polars>=1.0.0",
+    "polars>=1.40.1",
 ]
 params = [
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
 ]
 polars = [
-    "polars>=1.0.0",
+    "polars>=1.40.1",
 ]
 
 # ============== Tool Configuration ==============
@@ -267,5 +267,5 @@ skips = [
 
 [dependency-groups]
 dev = [
-    "build>=1.4.4",
+    "build>=1.5.0",
 ]
