@@ -10,9 +10,9 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
-    "pyarrow>=23.0.1",
+    "pyarrow>=24.0.0",
     "pandas>=3.0.2",
-    "certifi>=2026.2.25",
+    "certifi>=2026.4.22",
     "requests>=2.33.1",
 ]
 authors = [
@@ -41,25 +41,29 @@ Issues = "https://github.com/spiceai/spicepy/issues"
 test = [
     "pylint>=4.0.5",
     "flake8>=7.3.0",
-    "ruff>=0.15.10",
-    "mypy>=1.20.0",
+    "ruff>=0.15.12",
+    "mypy>=1.20.2",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "pytest-timeout>=2.4.0",
     "pytest_httpserver==1.1.5",
-    "types-requests>=2.33.0",
-    "pandas-stubs>=3.0.0",
+    "types-requests>=2.33.0.20260408",
+    "pandas-stubs>=3.0.0.260204",
     "black>=26.3.1",
     "bandit>=1.9.4",
     "pandas>=3.0.2",
-    "pyarrow>=23.0.1",
+    "pyarrow>=24.0.0",
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
+    "polars>=1.0.0",
 ]
 params = [
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
+]
+polars = [
+    "polars>=1.0.0",
 ]
 
 # ============== Tool Configuration ==============
@@ -93,6 +97,8 @@ module = [
     "adbc_driver_manager.*",
     "certifi",
     "pandas",
+    "polars",
+    "polars.*",
     "_pytest.*",
     "pytest.*",
 ]
@@ -185,6 +191,14 @@ ignore = [
     "PLR2004", # Magic values ok in tests
     "ARG",    # Unused arguments ok in tests (fixtures)
     "T20",    # Print statements ok in tests
+    "N812",   # `functions as F` is the DataFrame convention
+    "S608",   # asserting SQL fragments is the point of these tests
+]
+"spicepy/_client.py" = [
+    "S608",   # SQL is constructed from escaped identifiers/literals; lint can't tell
+]
+"spicepy/_dataframe.py" = [
+    "S608",   # The DataFrame layer's entire job is composing SQL; identifiers and literals are escaped
 ]
 
 [tool.ruff.lint.isort]
@@ -246,9 +260,12 @@ directory = "htmlcov"
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
-skips = ["B101"]  # assert_used
+skips = [
+    "B101",  # assert_used
+    "B608",  # hardcoded_sql_expressions: composing SQL with escaped identifiers/literals is this package's job
+]
 
 [dependency-groups]
 dev = [
-    "build>=1.4.3",
+    "build>=1.4.4",
 ]

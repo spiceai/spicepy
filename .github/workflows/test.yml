@@ -97,7 +97,7 @@ jobs:
       # guest).
       - name: Set up WSL (Windows)
         if: matrix.os == 'windows-latest'
-        uses: Vampire/setup-wsl@887f39deb6c0976365e546926fe66f41b77d65ff # v6.1.0
+        uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-24.04
           additional-packages: |
@@ -107,6 +107,8 @@ jobs:
       - name: install Spice in WSL (Windows)
         if: matrix.os == 'windows-latest'
         shell: wsl-bash {0}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl https://install.spiceai.org | /bin/bash
           $HOME/.spice/bin/spice install
@@ -220,7 +222,7 @@ jobs:
           pytest --cov=spicepy --cov-report=xml --cov-report=term-missing --ignore=tests/test_main.py tests/
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v4.5.0
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
