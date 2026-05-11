@@ -18,6 +18,16 @@ class Expr:
     All operator overloads (``+ - * / % == != < <= > >= & | ~``) return a new
     :class:`Expr`, which means expressions compose without evaluating until the
     enclosing DataFrame is materialized.
+
+    Note: ``__eq__`` and the other comparison operators are intentionally
+    overridden to build SQL expression trees rather than to return ``bool``.
+    This is the standard DataFrame DSL pattern (SQLAlchemy, pandas, polars,
+    Ibis, datafusion-python all do the same). ``col("x") == 5`` returns an
+    :class:`Expr` that compiles to ``"x" = 5``, not the Python ``bool`` ``False``.
+    Subclasses therefore *must not* override ``__eq__`` to compare attributes —
+    doing so would silently break filtering and joins. Static analyzers that
+    flag subclasses for "missing ``__eq__``" are misapplying a rule that
+    assumes value-semantics ``__eq__``; here ``__eq__`` is the DSL builder.
     """
 
     def to_sql(self) -> str:
@@ -33,7 +43,7 @@ class Expr:
     def cast(self, arrow_type: Any) -> Expr:
         return _Cast(self, _arrow_type_to_sql(arrow_type))
 
-    # --- comparison ---
+    # --- comparison (DSL: returns Expr, not bool — see class docstring) ---
 
     def __eq__(self, other: object) -> Expr:  # type: ignore[override]
         return _BinOp(self, "=", _coerce(other))
