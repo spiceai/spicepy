@@ -1213,6 +1213,319 @@ class TestClientQueryHelpers:
                 client.query_polars("SELECT 1")
 
 
+class TestClientCatalog:
+    """Test catalog introspection helpers (catalogs/schemas/tables/describe/get_schema)."""
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_catalogs(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table(
+            {"catalog_name": ["default", "other"]}
+        )
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        result = client.catalogs()
+        assert result == ["default", "other"]
+        sql = mock_flight.query.call_args[0][0]
+        assert "information_schema.schemata" in sql
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_schemas_no_filter(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table(
+            {"schema_name": ["public", "info"]}
+        )
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        assert client.schemas() == ["public", "info"]
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_schemas_filtered(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table({"schema_name": ["public"]})
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        client.schemas(catalog="default")
+        sql = mock_flight.query.call_args[0][0]
+        assert "WHERE catalog_name = 'default'" in sql
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_tables_filtered(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table({"table_name": ["trips"]})
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        client.tables(schema="public")
+        sql = mock_flight.query.call_args[0][0]
+        assert "table_schema = 'public'" in sql
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_describe(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table(
+            {"column_name": ["a"], "data_type": ["INT"]}
+        )
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        client.describe("trips")
+        sql = mock_flight.query.call_args[0][0]
+        assert sql == 'DESCRIBE "trips"'
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_get_schema(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        sample = pa.table({"a": [1]}, schema=pa.schema([("a", pa.int64())]))
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = sample
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        schema = client.get_schema("SELECT 1 AS a")
+        assert schema == sample.schema
+        sql = mock_flight.query.call_args[0][0]
+        assert "LIMIT 0" in sql
+
+
+class TestClientExplain:
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_explain_basic(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table(
+            {"plan_type": ["logical_plan"], "plan": ["Projection: ..."]}
+        )
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        text = client.explain("SELECT 1")
+        assert "Projection" in text
+        sql = mock_flight.query.call_args[0][0]
+        assert sql.startswith("EXPLAIN ")
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_explain_analyze_verbose(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table({"plan": ["..."]})
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        client.explain("SELECT 1", analyze=True, verbose=True)
+        sql = mock_flight.query.call_args[0][0]
+        assert "EXPLAIN ANALYZE VERBOSE" in sql
+
+
+class TestClientBatchesAndPydict:
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_pydict(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        mock_reader = MagicMock()
+        mock_reader.read_all.return_value = pa.table({"a": [1, 2], "b": ["x", "y"]})
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        result = client.query_pydict("SELECT * FROM t")
+        assert result == {"a": [1, 2], "b": ["x", "y"]}
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_query_batches_yields_batches(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        batch1 = pa.record_batch({"x": [1, 2]})
+        batch2 = pa.record_batch({"x": [3, 4]})
+        # FlightStreamChunk-like shape: object with `.data` attribute.
+        chunk1 = MagicMock()
+        chunk1.data = batch1
+        chunk2 = MagicMock()
+        chunk2.data = batch2
+        mock_reader = MagicMock()
+        mock_reader.__iter__.return_value = iter([chunk1, chunk2])
+        mock_flight = MagicMock()
+        mock_flight.query.return_value = mock_reader
+        mock_flight_class.return_value = mock_flight
+
+        client = Client()
+        batches = list(client.query_batches("SELECT 1"))
+        assert batches == [batch1, batch2]
+
+
+class TestClientDataFrameEntry:
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_table_returns_dataframe(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        from spicepy import SpiceDataFrame
+
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        client = Client()
+        df = client.table("trips")
+        assert isinstance(df, SpiceDataFrame)
+        assert df.to_sql() == 'SELECT * FROM "trips"'
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_sql_returns_dataframe(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        from spicepy import SpiceDataFrame
+
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        client = Client()
+        df = client.sql("SELECT 1")
+        assert isinstance(df, SpiceDataFrame)
+        assert df.to_sql() == "SELECT 1"
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_from_arrow(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        client = Client()
+        table = pa.table({"a": [1, 2], "b": ["x", "y"]})
+        df = client.from_arrow(table)
+        sql = df.to_sql()
+        assert "VALUES" in sql and "(1, 'x')" in sql
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    def test_from_pydict(
+        self,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        client = Client()
+        df = client.from_pydict({"a": [1], "b": [2]})
+        assert "VALUES" in df.to_sql()
+
+
 class TestIsMacosArm64:
     """Test is_macos_arm64 function."""
 

@@ -191,6 +191,14 @@ ignore = [
     "PLR2004", # Magic values ok in tests
     "ARG",    # Unused arguments ok in tests (fixtures)
     "T20",    # Print statements ok in tests
+    "N812",   # `functions as F` is the DataFrame convention
+    "S608",   # asserting SQL fragments is the point of these tests
+]
+"spicepy/_client.py" = [
+    "S608",   # SQL is constructed from escaped identifiers/literals; lint can't tell
+]
+"spicepy/_dataframe.py" = [
+    "S608",   # The DataFrame layer's entire job is composing SQL; identifiers and literals are escaped
 ]
 
 [tool.ruff.lint.isort]
