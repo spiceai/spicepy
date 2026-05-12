@@ -236,8 +236,32 @@ class _SpiceFlight:
             )
         return (str.encode("user-agent"), str.encode(config.SPICE_USER_AGENT))
 
-    def __init__(self, grpc: str, api_key: str, tls_root_certs, user_agent=None):
-        self._flight_client = flight.connect(grpc, tls_root_certs=tls_root_certs)
+    def __init__(
+        self,
+        grpc: str,
+        api_key: str,
+        tls_root_certs,
+        user_agent=None,
+        tls_client_certificate: str | Path | None = None,
+        tls_client_key: str | Path | None = None,
+    ):
+        connect_kwargs = {"tls_root_certs": tls_root_certs}
+        if tls_client_certificate is not None and tls_client_key is not None:
+            cert_path = (
+                tls_client_certificate
+                if isinstance(tls_client_certificate, Path)
+                else Path(tls_client_certificate)
+            )
+            key_path = (
+                tls_client_key
+                if isinstance(tls_client_key, Path)
+                else Path(tls_client_key)
+            )
+            with open(cert_path, "rb") as f:
+                connect_kwargs["cert_chain"] = f.read()
+            with open(key_path, "rb") as f:
+                connect_kwargs["private_key"] = f.read()
+        self._flight_client = flight.connect(grpc, **connect_kwargs)
         self._api_key = api_key
         self.headers = [_SpiceFlight._user_agent(user_agent)]
         self._flight_options = flight.FlightCallOptions(
@@ -312,17 +336,39 @@ class Client:
         http_url: str = config.DEFAULT_HTTP_URL,
         tls_root_cert: str | Path | None = None,
         user_agent: str | None = None,
+        tls_client_certificate: str | Path | None = None,
+        tls_client_key: str | Path | None = None,
     ):  # pylint: disable=R0913
+        # Validate that client cert and key are either both set or both unset
+        has_cert = tls_client_certificate is not None
+        has_key = tls_client_key is not None
+        if has_cert != has_key:
+            missing = "tls_client_key" if has_cert else "tls_client_certificate"
+            raise ValueError(
+                f"Both tls_client_certificate and tls_client_key must be "
+                f"provided together for mTLS. {missing} is missing."
+            )
+
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
         self._flight = _SpiceFlight(
-            flight_url, api_key or "", tls_root_certs, user_agent
+            flight_url,
+            api_key or "",
+            tls_root_certs,
+            user_agent,
+            tls_client_certificate=tls_client_certificate,
+            tls_client_key=tls_client_key,
         )
 
         self.api_key = api_key
         self._flight_url = flight_url
         self._user_agent = user_agent
         self._adbc_client: _ADBCClient | None = None
-        self.http = HttpRequests(http_url, self._headers(user_agent))
+        self.http = HttpRequests(
+            http_url,
+            self._headers(user_agent),
+            tls_client_certificate=tls_client_certificate,
+            tls_client_key=tls_client_key,
+        )
 
     def _headers(self, user_agent=None) -> dict[str, str]:
         headers = {

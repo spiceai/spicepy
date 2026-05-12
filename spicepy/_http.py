@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 import datetime
+from pathlib import Path
 from typing import Any, Literal
 
 from requests import Response, Session
@@ -28,12 +29,22 @@ HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
 
 
 class HttpRequests:
-    def __init__(self, base_url: str, headers: dict[str, str]) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        headers: dict[str, str],
+        tls_client_certificate: str | Path | None = None,
+        tls_client_key: str | Path | None = None,
+    ) -> None:
         self.session = self._create_session(headers)
 
         # set the user-agent header
         if "user-agent" not in self.session.headers:
             self.session.headers["user-agent"] = SPICE_USER_AGENT
+
+        # Configure client certificate for mTLS on HTTP requests
+        if tls_client_certificate is not None and tls_client_key is not None:
+            self.session.cert = (str(tls_client_certificate), str(tls_client_key))
 
         self.base_url = base_url
 
