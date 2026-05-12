@@ -19,5 +19,3 @@
 
 # Build configuration
 /pyproject.toml @spiceai/sdk-team
-/setup.py @spiceai/sdk-team
-/requirements.txt @spiceai/sdk-team

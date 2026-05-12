@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spicepy"
-dynamic = ["version"]
+version = "4.0.0"
 description = "Spice.ai client library for Python"
 readme = "README.md"
 license = {text = "Apache-2.0"}
