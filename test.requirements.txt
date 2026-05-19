@@ -1,7 +1,7 @@
 # Linting & Formatting
 pylint>=3.3.1
 flake8>=7.1.1
-ruff>=0.15.12
+ruff>=0.15.13
 mypy>=2.1.0
 
 # Testing
@@ -12,7 +12,7 @@ pytest-timeout>=2.3.1
 pytest_httpserver==1.1.5
 
 # Type stubs
-types-requests>=2.33.0.20260508
+types-requests>=2.33.0.20260518
 pandas-stubs>=3.0.0.260204
 
 # Security scanning
