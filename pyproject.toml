@@ -12,8 +12,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pyarrow>=24.0.0",
     "pandas>=3.0.3",
-    "certifi>=2026.4.22",
-    "requests>=2.34.0",
+    "certifi>=2026.5.20",
+    "requests>=2.34.2",
 ]
 authors = [
     {name = "Spice AI, Inc.", email = "webmaster@spice.ai"}
@@ -41,29 +41,29 @@ Issues = "https://github.com/spiceai/spicepy/issues"
 test = [
     "pylint>=4.0.5",
     "flake8>=7.3.0",
-    "ruff>=0.15.12",
+    "ruff>=0.15.14",
     "mypy>=2.1.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "pytest-timeout>=2.4.0",
     "pytest_httpserver==1.1.5",
-    "types-requests>=2.33.0.20260508",
+    "types-requests>=2.33.0.20260518",
     "pandas-stubs>=3.0.0.260204",
-    "black>=26.3.1",
+    "black>=26.5.1",
     "bandit>=1.9.4",
     "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
-    "polars>=1.40.1",
+    "polars>=1.41.0",
 ]
 params = [
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
 ]
 polars = [
-    "polars>=1.40.1",
+    "polars>=1.41.0",
 ]
 
 # ============== Tool Configuration ==============
