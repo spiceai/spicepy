@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=82.0.1", "wheel"]
+requires = ["setuptools>=83.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,8 +12,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pyarrow>=24.0.0",
     "pandas>=3.0.3",
-    "certifi>=2026.4.22",
-    "requests>=2.34.0",
+    "certifi>=2026.6.17",
+    "requests>=2.34.2",
 ]
 authors = [
     {name = "Spice AI, Inc.", email = "webmaster@spice.ai"}
@@ -39,31 +39,31 @@ Issues = "https://github.com/spiceai/spicepy/issues"
 
 [project.optional-dependencies]
 test = [
-    "pylint>=4.0.5",
+    "pylint>=4.0.6",
     "flake8>=7.3.0",
-    "ruff>=0.15.12",
+    "ruff>=0.15.20",
     "mypy>=2.1.0",
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "pytest-timeout>=2.4.0",
     "pytest_httpserver==1.1.5",
-    "types-requests>=2.33.0.20260508",
-    "pandas-stubs>=3.0.0.260204",
-    "black>=26.3.1",
+    "types-requests>=2.33.0.20260518",
+    "pandas-stubs>=3.0.3.260530",
+    "black>=26.5.1",
     "bandit>=1.9.4",
     "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
-    "polars>=1.40.1",
+    "polars>=1.42.1",
 ]
 params = [
     "adbc-driver-flightsql>=1.11.0",
     "adbc-driver-manager>=1.11.0",
 ]
 polars = [
-    "polars>=1.40.1",
+    "polars>=1.42.1",
 ]
 
 # ============== Tool Configuration ==============
