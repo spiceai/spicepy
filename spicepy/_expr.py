@@ -150,12 +150,20 @@ class Expr:
 
         Array indexing follows Python's 0-based convention and compiles to
         DataFusion's 1-based ``array_element`` — so ``col("a")[0]`` is the first
-        element. Struct fields compile to ``get_field``. For slicing, use
+        element. Negative indices are rejected (the 0-based → 1-based mapping
+        cannot express from-the-end access); use
+        :func:`spicepy.functions.array_element` with an explicit SQL index if you
+        need it. Struct fields compile to ``get_field``. For slicing, use
         :func:`spicepy.functions.array_slice`.
         """
         if isinstance(key, bool):
             raise TypeError("index must be int or str, not bool")
         if isinstance(key, int):
+            if key < 0:
+                raise ValueError(
+                    "negative array indices are not supported; use a non-negative "
+                    "0-based index, or F.array_element() with an explicit SQL index"
+                )
             return _Func("ARRAY_ELEMENT", [self, _Literal(key + 1)])
         if isinstance(key, str):
             return _Func("GET_FIELD", [self, _Literal(key)])

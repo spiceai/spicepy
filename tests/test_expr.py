@@ -127,6 +127,10 @@ class TestElementAccess:
     def test_struct_field(self) -> None:
         assert col("s")["city"].to_sql() == """GET_FIELD("s", 'city')"""
 
+    def test_negative_index_raises(self) -> None:
+        with pytest.raises(ValueError, match="negative array indices"):
+            _ = col("arr")[-1]
+
     def test_bool_key_raises(self) -> None:
         with pytest.raises(TypeError, match="not bool"):
             _ = col("arr")[True]

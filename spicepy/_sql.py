@@ -23,7 +23,9 @@ def quote_qualified(*parts: str) -> str:
 def quote_literal(value: Any) -> str:
     """Render a Python value as a SQL literal.
 
-    Supports None, bool, int, float, Decimal, str, bytes, date, datetime, time.
+    Supports None, bool, int, float, Decimal, str, bytes, date, datetime, time,
+    list (rendered as ``MAKE_ARRAY(...)``), and dict (rendered as
+    ``NAMED_STRUCT(...)``); lists and dicts render their items recursively.
     Raises TypeError for unsupported types — use parameterized queries instead.
     """
     if value is None:
