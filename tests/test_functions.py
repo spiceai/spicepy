@@ -76,6 +76,10 @@ class TestConditional:
         with pytest.raises(ValueError, match="at least one"):
             F.greatest()
 
+    def test_least_requires_arg(self) -> None:
+        with pytest.raises(ValueError, match="at least one"):
+            F.least()
+
 
 class TestMath:
     def test_abs(self) -> None:
