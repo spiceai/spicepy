@@ -254,6 +254,32 @@ class TestValuesDataFrame:
             values_dataframe(client, [{"a": 1}, {"b": 2}])
 
 
+class TestWriters:
+    def test_write_parquet_delegates(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        df.write_parquet("out.parquet")
+        client.write_parquet.assert_called_once_with(
+            'SELECT * FROM "trips"', "out.parquet"
+        )
+
+    def test_write_parquet_passes_kwargs(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        df.write_parquet("out.parquet", compression="snappy")
+        client.write_parquet.assert_called_once_with(
+            'SELECT * FROM "trips"', "out.parquet", compression="snappy"
+        )
+
+    def test_write_csv_delegates(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        df.write_csv("out.csv")
+        client.write_csv.assert_called_once_with('SELECT * FROM "trips"', "out.csv")
+
+    def test_write_json_delegates(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        df.write_json("out.json")
+        client.write_json.assert_called_once_with('SELECT * FROM "trips"', "out.json")
+
+
 class TestRepr:
     def test_repr(self, df: SpiceDataFrame) -> None:
         assert "SELECT" in repr(df)

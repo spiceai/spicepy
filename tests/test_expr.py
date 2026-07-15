@@ -5,7 +5,7 @@ from __future__ import annotations
 import pyarrow as pa
 import pytest
 
-from spicepy import case, col, lit
+from spicepy import WindowFrame, case, col, lit
 from spicepy._expr import _Raw
 
 
@@ -100,6 +100,22 @@ class TestPredicates:
         assert col("x").between(1, 10).to_sql() == '("x" BETWEEN 1 AND 10)'
 
 
+class TestPatternMatching:
+    def test_like(self) -> None:
+        assert col("name").like("%foo%").to_sql() == """("name" LIKE '%foo%')"""
+
+    def test_ilike(self) -> None:
+        assert col("name").ilike("%FOO%").to_sql() == """("name" ILIKE '%FOO%')"""
+
+    def test_not_like(self) -> None:
+        assert col("name").not_like("%bar%").to_sql() == """("name" NOT LIKE '%bar%')"""
+
+    def test_not_ilike(self) -> None:
+        assert (
+            col("name").not_ilike("%bar%").to_sql() == """("name" NOT ILIKE '%bar%')"""
+        )
+
+
 class TestAliasAndCast:
     def test_alias(self) -> None:
         assert col("x").alias("y").to_sql() == '"x" AS "y"'
@@ -119,6 +135,12 @@ class TestAliasAndCast:
     def test_cast_bad_type(self) -> None:
         with pytest.raises(TypeError):
             col("x").cast(object())
+
+    def test_try_cast_string(self) -> None:
+        assert col("x").try_cast("BIGINT").to_sql() == 'TRY_CAST("x" AS BIGINT)'
+
+    def test_try_cast_arrow_type(self) -> None:
+        assert col("x").try_cast(pa.int32()).to_sql() == 'TRY_CAST("x" AS INT)'
 
 
 class TestSortQualifier:
@@ -144,6 +166,43 @@ class TestCase:
     def test_no_branches_raises(self) -> None:
         with pytest.raises(ValueError, match="no WHEN"):
             case().to_sql()
+
+
+class TestWindowFrame:
+    def test_rows_unbounded_to_current(self) -> None:
+        assert (
+            WindowFrame("rows", None, 0).to_sql()
+            == "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+        )
+
+    def test_rows_trailing_window(self) -> None:
+        assert (
+            WindowFrame("rows", 6, 0).to_sql()
+            == "ROWS BETWEEN 6 PRECEDING AND CURRENT ROW"
+        )
+
+    def test_range_unbounded_both(self) -> None:
+        assert (
+            WindowFrame("range").to_sql()
+            == "RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
+        )
+
+    def test_groups_centered(self) -> None:
+        assert (
+            WindowFrame("groups", 1, 1).to_sql()
+            == "GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING"
+        )
+
+    def test_units_case_insensitive(self) -> None:
+        assert WindowFrame("ROWS", 0, 0).to_sql().startswith("ROWS BETWEEN")
+
+    def test_bad_units_raises(self) -> None:
+        with pytest.raises(ValueError, match="units"):
+            WindowFrame("bogus")
+
+    def test_negative_bound_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            WindowFrame("rows", -1, 0)
 
 
 class TestRaw:
