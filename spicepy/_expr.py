@@ -143,6 +143,27 @@ class Expr:
     def not_ilike(self, pattern: Any) -> Expr:
         return _BinOp(self, "NOT ILIKE", _coerce(pattern))
 
+    # --- element / field access ---
+
+    def __getitem__(self, key: Any) -> Expr:
+        """Access an array element (0-indexed ``int``) or struct field (``str``).
+
+        Array indexing follows Python's 0-based convention and compiles to
+        DataFusion's 1-based ``array_element`` — so ``col("a")[0]`` is the first
+        element. Struct fields compile to ``get_field``. For slicing, use
+        :func:`spicepy.functions.array_slice`.
+        """
+        if isinstance(key, bool):
+            raise TypeError("index must be int or str, not bool")
+        if isinstance(key, int):
+            return _Func("ARRAY_ELEMENT", [self, _Literal(key + 1)])
+        if isinstance(key, str):
+            return _Func("GET_FIELD", [self, _Literal(key)])
+        raise TypeError(
+            "index must be int (array element) or str (struct field), "
+            f"got {type(key).__name__}"
+        )
+
     # --- sort qualifier (used inside sort()/order_by) ---
 
     def asc(self, nulls_first: bool = False) -> _SortExpr:

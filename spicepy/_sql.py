@@ -43,6 +43,14 @@ def quote_literal(value: Any) -> str:
         return "CAST('" + value.isoformat() + "' AS DATE)"
     if isinstance(value, time):
         return "CAST('" + value.isoformat() + "' AS TIME)"
+    if isinstance(value, list):
+        return "MAKE_ARRAY(" + ", ".join(quote_literal(v) for v in value) + ")"
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, item in value.items():
+            parts.append(quote_literal(str(key)))
+            parts.append(quote_literal(item))
+        return "NAMED_STRUCT(" + ", ".join(parts) + ")"
     raise TypeError(
         f"Cannot render {type(value).__name__} as a SQL literal; "
         "use a parameterized query."

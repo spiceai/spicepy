@@ -308,6 +308,147 @@ def case() -> _Case:
     return _case_builder()
 
 
+# --- arrays ---
+
+
+def make_array(*exprs: Any) -> Expr:
+    """Construct an array from the given elements: ``make_array(1, 2, 3)``."""
+    return _fn("MAKE_ARRAY", *exprs)
+
+
+def array(*exprs: Any) -> Expr:
+    """Alias for :func:`make_array`."""
+    return make_array(*exprs)
+
+
+def array_element(array: Any, n: Any) -> Expr:
+    """Element at 1-based index ``n`` (SQL convention). See also ``expr[i]``."""
+    return _fn("ARRAY_ELEMENT", array, n)
+
+
+def array_length(array: Any, dimension: Any = None) -> Expr:
+    if dimension is None:
+        return _fn("ARRAY_LENGTH", array)
+    return _fn("ARRAY_LENGTH", array, dimension)
+
+
+def array_append(array: Any, element: Any) -> Expr:
+    return _fn("ARRAY_APPEND", array, element)
+
+
+def array_prepend(element: Any, array: Any) -> Expr:
+    return _fn("ARRAY_PREPEND", element, array)
+
+
+def array_concat(*arrays: Any) -> Expr:
+    return _fn("ARRAY_CONCAT", *arrays)
+
+
+def array_has(array: Any, element: Any) -> Expr:
+    """True if ``array`` contains ``element``."""
+    return _fn("ARRAY_HAS", array, element)
+
+
+def array_has_all(array: Any, sub_array: Any) -> Expr:
+    return _fn("ARRAY_HAS_ALL", array, sub_array)
+
+
+def array_has_any(array: Any, other: Any) -> Expr:
+    return _fn("ARRAY_HAS_ANY", array, other)
+
+
+def array_position(array: Any, element: Any) -> Expr:
+    return _fn("ARRAY_POSITION", array, element)
+
+
+def array_slice(array: Any, begin: Any, end: Any, stride: Any = None) -> Expr:
+    """Slice with 1-based inclusive bounds (SQL convention)."""
+    if stride is None:
+        return _fn("ARRAY_SLICE", array, begin, end)
+    return _fn("ARRAY_SLICE", array, begin, end, stride)
+
+
+def array_distinct(array: Any) -> Expr:
+    return _fn("ARRAY_DISTINCT", array)
+
+
+def array_remove(array: Any, element: Any) -> Expr:
+    return _fn("ARRAY_REMOVE", array, element)
+
+
+def array_to_string(array: Any, delimiter: Any) -> Expr:
+    return _fn("ARRAY_TO_STRING", array, delimiter)
+
+
+def string_to_array(string: Any, delimiter: Any) -> Expr:
+    return _fn("STRING_TO_ARRAY", string, delimiter)
+
+
+def array_reverse(array: Any) -> Expr:
+    return _fn("ARRAY_REVERSE", array)
+
+
+def array_sort(array: Any) -> Expr:
+    return _fn("ARRAY_SORT", array)
+
+
+def array_dims(array: Any) -> Expr:
+    return _fn("ARRAY_DIMS", array)
+
+
+def array_union(a: Any, b: Any) -> Expr:
+    return _fn("ARRAY_UNION", a, b)
+
+
+def array_intersect(a: Any, b: Any) -> Expr:
+    return _fn("ARRAY_INTERSECT", a, b)
+
+
+def array_except(a: Any, b: Any) -> Expr:
+    return _fn("ARRAY_EXCEPT", a, b)
+
+
+def array_repeat(element: Any, count: Any) -> Expr:
+    return _fn("ARRAY_REPEAT", element, count)
+
+
+def array_distance(a: Any, b: Any) -> Expr:
+    """Euclidean (L2) distance between two equal-length numeric arrays."""
+    return _fn("ARRAY_DISTANCE", a, b)
+
+
+def flatten(array: Any) -> Expr:
+    return _fn("FLATTEN", array)
+
+
+def cardinality(array: Any) -> Expr:
+    return _fn("CARDINALITY", array)
+
+
+# --- structs ---
+
+
+def struct(*exprs: Any) -> Expr:
+    """Construct an unnamed struct from the given values."""
+    return _fn("STRUCT", *exprs)
+
+
+def named_struct(**fields: Any) -> Expr:
+    """Construct a struct with named fields: ``named_struct(x=1, y=2)``."""
+    if not fields:
+        raise ValueError("named_struct requires at least one field")
+    args: list[Any] = []
+    for name, value in fields.items():
+        args.append(name)
+        args.append(value)
+    return _fn("NAMED_STRUCT", *args)
+
+
+def get_field(expr: Any, name: Any) -> Expr:
+    """Extract a struct/map field by name. ``col("s")["x"]`` is shorthand."""
+    return _fn("GET_FIELD", expr, name)
+
+
 # --- window-only functions ---
 
 

@@ -116,6 +116,26 @@ class TestPatternMatching:
         )
 
 
+class TestElementAccess:
+    def test_array_element_zero_indexed(self) -> None:
+        # Python 0-based -> DataFusion 1-based array_element
+        assert col("arr")[0].to_sql() == 'ARRAY_ELEMENT("arr", 1)'
+
+    def test_array_element_nonzero(self) -> None:
+        assert col("arr")[2].to_sql() == 'ARRAY_ELEMENT("arr", 3)'
+
+    def test_struct_field(self) -> None:
+        assert col("s")["city"].to_sql() == """GET_FIELD("s", 'city')"""
+
+    def test_bool_key_raises(self) -> None:
+        with pytest.raises(TypeError, match="not bool"):
+            _ = col("arr")[True]
+
+    def test_float_key_raises(self) -> None:
+        with pytest.raises(TypeError, match="index must be"):
+            _ = col("arr")[1.5]
+
+
 class TestAliasAndCast:
     def test_alias(self) -> None:
         assert col("x").alias("y").to_sql() == '"x" AS "y"'
