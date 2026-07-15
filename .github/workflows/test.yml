@@ -76,20 +76,17 @@ jobs:
         run: |
           pip install ".[test]"
 
-      - name: Install Spice (https://install.spiceai.org) (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      # Linux and macOS both use the official cross-platform installer. The
+      # Homebrew formula's post-install ("Upgrading Spice Runtime...") fails
+      # intermittently on macOS runners, so brew is avoided here entirely.
+      - name: Install Spice (https://install.spiceai.org) (Linux & macOS)
+        if: matrix.os != 'windows-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
           $HOME/.spice/bin/spice install
-
-      - name: Install Spice (https://install.spiceai.org) (MacOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install spiceai/spiceai/spice
-          brew install spiceai/spiceai/spiced
 
       # Spice on Windows is only supported via WSL. Set up Ubuntu under WSL
       # and install Spice there; the tests on the Windows host then talk to
