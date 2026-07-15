@@ -150,6 +150,28 @@ jobs:
           echo "Spice runtime did not become ready within 120 seconds"
           exit 1
 
+      # The Windows readiness poll above runs inside WSL and only checks the
+      # HTTP port (8090). WSL2 forwards ports to the Windows host asynchronously,
+      # so 8090-ready in WSL does not guarantee the host can reach the Flight
+      # port (50051) yet — the tests run on the host and hit 50051, which raced
+      # into "connection refused". Gate the tests on host-side Flight reachability.
+      - name: Wait for Flight endpoint from host (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import socket, sys, time
+          for i in range(60):
+              try:
+                  with socket.create_connection(("127.0.0.1", 50051), timeout=2):
+                      print("Flight port 50051 reachable from host")
+                      sys.exit(0)
+              except OSError:
+                  print(f"waiting for Flight 50051 from host... ({i + 1}/60)")
+                  time.sleep(1)
+          sys.exit("Flight port 50051 never became reachable from host")
+          PY
+
       - name: Running tests
         env:
           API_KEY: ${{ secrets.API_KEY }}
