@@ -265,7 +265,7 @@ class TestColumnSelection:
         )
 
     def test_getitem_empty_list_raises(self, df: SpiceDataFrame) -> None:
-        with pytest.raises(ValueError, match="at least one column"):
+        with pytest.raises(KeyError, match="at least one column"):
             _ = df[[]]
 
     def test_getitem_bad_key_raises(self, df: SpiceDataFrame) -> None:

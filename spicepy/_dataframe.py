@@ -416,7 +416,7 @@ class SpiceDataFrame:
             return self.select(_col_builder(key))
         if isinstance(key, list):
             if not key:
-                raise ValueError("column selection requires at least one column")
+                raise KeyError("column selection requires at least one column")
             return self.select(*[_col_builder(k) for k in key])
         raise TypeError(
             f"index must be a column name or list of names, got {type(key).__name__}"
