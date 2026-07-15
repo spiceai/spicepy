@@ -164,6 +164,19 @@ class SpiceDataFrame:
     def distinct(self) -> SpiceDataFrame:
         return self._wrap(f"SELECT DISTINCT * FROM {self._from()}")
 
+    def unnest(self, *columns: str) -> SpiceDataFrame:
+        """Explode array column(s) into one row per element.
+
+        Non-unnested columns repeat for each element (DataFusion evaluates
+        ``unnest`` in the projection).
+        """
+        if not columns:
+            raise ValueError("unnest() requires at least one column")
+        replacements = ", ".join(
+            f"unnest({quote_ident(c)}) AS {quote_ident(c)}" for c in columns
+        )
+        return self._wrap(f"SELECT * REPLACE ({replacements}) FROM {self._from()}")
+
     # ------------------------------------------------------------------
     # Set operations
     # ------------------------------------------------------------------
@@ -185,8 +198,11 @@ class SpiceDataFrame:
     def join(
         self,
         other: SpiceDataFrame,
-        on: str | list[str] | Expr,
+        on: str | list[str] | Expr | None = None,
         how: str = "inner",
+        *,
+        left_on: str | list[str] | None = None,
+        right_on: str | list[str] | None = None,
         left_alias: str = "l",
         right_alias: str = "r",
     ) -> SpiceDataFrame:
@@ -203,7 +219,27 @@ class SpiceDataFrame:
         if kind == "cross":
             return self._wrap(f"SELECT * FROM {left} {join_sql} {right}")
 
-        if isinstance(on, Expr):
+        if left_on is not None or right_on is not None:
+            if on is not None:
+                raise ValueError("pass either `on` or `left_on`/`right_on`, not both")
+            if left_on is None or right_on is None:
+                raise ValueError("left_on and right_on must be provided together")
+            left_keys = [left_on] if isinstance(left_on, str) else list(left_on)
+            right_keys = [right_on] if isinstance(right_on, str) else list(right_on)
+            if not left_keys or len(left_keys) != len(right_keys):
+                raise ValueError(
+                    "left_on and right_on must have the same non-zero length"
+                )
+            on_sql = "ON " + " AND ".join(
+                f"{quote_ident(left_alias)}.{quote_ident(lk)} = "
+                f"{quote_ident(right_alias)}.{quote_ident(rk)}"
+                for lk, rk in zip(left_keys, right_keys, strict=True)
+            )
+        elif on is None:
+            raise ValueError(
+                "join requires `on`, or `left_on`/`right_on`, or how='cross'"
+            )
+        elif isinstance(on, Expr):
             on_sql = f"ON {on.to_sql()}"
         else:
             keys = [on] if isinstance(on, str) else list(on)
@@ -214,6 +250,32 @@ class SpiceDataFrame:
                 f"{quote_ident(right_alias)}.{quote_ident(k)}"
                 for k in keys
             )
+        return self._wrap(f"SELECT * FROM {left} {join_sql} {right} {on_sql}")
+
+    def join_on(
+        self,
+        other: SpiceDataFrame,
+        *predicates: Expr,
+        how: str = "inner",
+        left_alias: str = "l",
+        right_alias: str = "r",
+    ) -> SpiceDataFrame:
+        """Join on arbitrary boolean predicates, ANDed together.
+
+        Reference each side with a column qualifier, e.g.::
+
+            df.join_on(other, col("user_id", "l") == col("id", "r"))
+        """
+        if not predicates:
+            raise ValueError("join_on() requires at least one predicate")
+        kind = how.lower()
+        if kind not in _JOIN_KINDS or kind == "cross":
+            valid = sorted(k for k in _JOIN_KINDS if k != "cross")
+            raise ValueError(f"join_on does not support how={how!r}; expected {valid}")
+        join_sql = _JOIN_KINDS[kind]
+        left = f"{self._from()} {quote_ident(left_alias)}"
+        right = f"{other._from()} {quote_ident(right_alias)}"
+        on_sql = "ON " + " AND ".join(p.to_sql() for p in predicates)
         return self._wrap(f"SELECT * FROM {left} {join_sql} {right} {on_sql}")
 
     def cross_join(self, other: SpiceDataFrame) -> SpiceDataFrame:
@@ -239,6 +301,44 @@ class SpiceDataFrame:
         """Return the Arrow schema of this DataFrame (executes ``LIMIT 0``)."""
         reader = self._client.query(f"SELECT * FROM {self._from()} LIMIT 0")
         return reader.read_all().schema
+
+    def describe(self) -> SpiceDataFrame:
+        """Summary statistics (count, mean, stddev, min, max) per numeric column.
+
+        Reads the schema (a ``LIMIT 0`` round-trip), then returns a lazy
+        DataFrame whose rows are labelled by a ``statistic`` column. Only
+        numeric columns are summarized, matching ``pandas.DataFrame.describe``.
+        """
+        import pyarrow as pa
+
+        numeric = [
+            field.name
+            for field in self.schema()
+            if pa.types.is_integer(field.type)
+            or pa.types.is_floating(field.type)
+            or pa.types.is_decimal(field.type)
+        ]
+        if not numeric:
+            raise ValueError("describe() found no numeric columns to summarize")
+
+        stats = [
+            ("count", "CAST(COUNT({c}) AS DOUBLE)"),
+            ("mean", "AVG(CAST({c} AS DOUBLE))"),
+            ("stddev", "STDDEV(CAST({c} AS DOUBLE))"),
+            ("min", "CAST(MIN({c}) AS DOUBLE)"),
+            ("max", "CAST(MAX({c}) AS DOUBLE)"),
+        ]
+        selects = []
+        for stat_name, template in stats:
+            cols = ", ".join(
+                f"{template.format(c=quote_ident(c))} AS {quote_ident(c)}"
+                for c in numeric
+            )
+            selects.append(
+                f"SELECT {quote_literal(stat_name)} AS {quote_ident('statistic')}, "
+                f"{cols} FROM {self._from()}"
+            )
+        return self._wrap(" UNION ALL ".join(selects))
 
     def explain(self, analyze: bool = False, verbose: bool = False) -> str:
         prefix = "EXPLAIN"
