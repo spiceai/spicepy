@@ -69,6 +69,21 @@ class TestQuoteLiteral:
     def test_time(self) -> None:
         assert quote_literal(time(9, 15, 30)) == "CAST('09:15:30' AS TIME)"
 
+    def test_list_array(self) -> None:
+        assert quote_literal([1, 2, 3]) == "MAKE_ARRAY(1, 2, 3)"
+
+    def test_list_of_strings(self) -> None:
+        assert quote_literal(["a", "b"]) == "MAKE_ARRAY('a', 'b')"
+
+    def test_nested_list(self) -> None:
+        assert (
+            quote_literal([[1, 2], [3]])
+            == "MAKE_ARRAY(MAKE_ARRAY(1, 2), MAKE_ARRAY(3))"
+        )
+
+    def test_dict_struct(self) -> None:
+        assert quote_literal({"x": 1, "y": "a"}) == "NAMED_STRUCT('x', 1, 'y', 'a')"
+
     def test_unsupported_raises(self) -> None:
         with pytest.raises(TypeError, match="Cannot render"):
-            quote_literal({"a": 1})
+            quote_literal(object())

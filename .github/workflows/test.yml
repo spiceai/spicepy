@@ -84,9 +84,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          curl https://install.spiceai.org | /bin/bash
+          # The installer download/extract flakes intermittently on CI runners,
+          # so retry the two network steps before giving up (-f fails on HTTP errors).
+          retry() {
+            local n=1
+            until "$@"; do
+              [ $n -ge 3 ] && { echo "'$*' failed after $n attempts" >&2; return 1; }
+              echo "attempt $n of '$*' failed; retrying in 5s..." >&2
+              n=$((n + 1)); sleep 5
+            done
+          }
+          retry bash -c 'curl -fsSL https://install.spiceai.org | bash'
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
-          $HOME/.spice/bin/spice install
+          retry "$HOME/.spice/bin/spice" install
 
       # Spice on Windows is only supported via WSL. Set up Ubuntu under WSL
       # and install Spice there; the tests on the Windows host then talk to
@@ -107,8 +117,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          curl https://install.spiceai.org | /bin/bash
-          $HOME/.spice/bin/spice install
+          # Retry the install: the download/extract flakes intermittently in WSL
+          # ("Failed to extract archive"). -f makes curl fail on HTTP errors.
+          retry() {
+            local n=1
+            until "$@"; do
+              [ $n -ge 3 ] && { echo "'$*' failed after $n attempts" >&2; return 1; }
+              echo "attempt $n of '$*' failed; retrying in 5s..." >&2
+              n=$((n + 1)); sleep 5
+            done
+          }
+          retry bash -c 'curl -fsSL https://install.spiceai.org | bash'
+          retry "$HOME/.spice/bin/spice" install
 
       - name: Init and start spice app
         if: matrix.os != 'windows-latest'

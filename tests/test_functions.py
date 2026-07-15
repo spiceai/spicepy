@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from spicepy import WindowFrame, col
+from spicepy import WindowFrame, col, lit
 from spicepy import functions as F
 
 
@@ -139,6 +139,85 @@ class TestNullHandling:
 
     def test_nullif(self) -> None:
         assert F.nullif(col("a"), 0).to_sql() == 'NULLIF("a", 0)'
+
+
+class TestArrays:
+    def test_make_array(self) -> None:
+        assert F.make_array(1, 2, 3).to_sql() == "MAKE_ARRAY(1, 2, 3)"
+
+    def test_array_alias(self) -> None:
+        assert F.array(col("a"), col("b")).to_sql() == 'MAKE_ARRAY("a", "b")'
+
+    def test_array_element(self) -> None:
+        assert F.array_element(col("a"), 1).to_sql() == 'ARRAY_ELEMENT("a", 1)'
+
+    def test_array_length(self) -> None:
+        assert F.array_length(col("a")).to_sql() == 'ARRAY_LENGTH("a")'
+
+    def test_array_length_with_dimension(self) -> None:
+        assert F.array_length(col("a"), 1).to_sql() == 'ARRAY_LENGTH("a", 1)'
+
+    def test_array_append(self) -> None:
+        assert F.array_append(col("a"), 9).to_sql() == 'ARRAY_APPEND("a", 9)'
+
+    def test_array_prepend(self) -> None:
+        assert F.array_prepend(0, col("a")).to_sql() == 'ARRAY_PREPEND(0, "a")'
+
+    def test_array_concat(self) -> None:
+        assert F.array_concat(col("a"), col("b")).to_sql() == 'ARRAY_CONCAT("a", "b")'
+
+    def test_array_has(self) -> None:
+        assert (
+            F.array_has(col("tags"), "urgent").to_sql()
+            == """ARRAY_HAS("tags", 'urgent')"""
+        )
+
+    def test_array_slice(self) -> None:
+        assert F.array_slice(col("a"), 1, 3).to_sql() == 'ARRAY_SLICE("a", 1, 3)'
+
+    def test_array_slice_with_stride(self) -> None:
+        assert F.array_slice(col("a"), 1, 5, 2).to_sql() == 'ARRAY_SLICE("a", 1, 5, 2)'
+
+    def test_array_to_string(self) -> None:
+        assert (
+            F.array_to_string(col("a"), ",").to_sql() == """ARRAY_TO_STRING("a", ',')"""
+        )
+
+    def test_cardinality(self) -> None:
+        assert F.cardinality(col("a")).to_sql() == 'CARDINALITY("a")'
+
+    def test_flatten(self) -> None:
+        assert F.flatten(col("a")).to_sql() == 'FLATTEN("a")'
+
+    def test_array_distance(self) -> None:
+        assert (
+            F.array_distance(col("a"), col("b")).to_sql() == 'ARRAY_DISTANCE("a", "b")'
+        )
+
+    def test_array_distance_with_literal_vector(self) -> None:
+        # embeddings/vector use case: a literal list renders as MAKE_ARRAY
+        assert (
+            F.array_distance(col("embedding"), lit([0.1, 0.2])).to_sql()
+            == 'ARRAY_DISTANCE("embedding", MAKE_ARRAY(0.1, 0.2))'
+        )
+
+
+class TestStructs:
+    def test_struct(self) -> None:
+        assert F.struct(col("a"), col("b")).to_sql() == 'STRUCT("a", "b")'
+
+    def test_named_struct(self) -> None:
+        assert (
+            F.named_struct(x=col("a"), y=1).to_sql()
+            == """NAMED_STRUCT('x', "a", 'y', 1)"""
+        )
+
+    def test_named_struct_requires_field(self) -> None:
+        with pytest.raises(ValueError, match="at least one field"):
+            F.named_struct()
+
+    def test_get_field(self) -> None:
+        assert F.get_field(col("s"), "city").to_sql() == """GET_FIELD("s", 'city')"""
 
 
 class TestWindowFunctions:
