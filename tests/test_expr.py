@@ -128,7 +128,7 @@ class TestElementAccess:
         assert col("s")["city"].to_sql() == """GET_FIELD("s", 'city')"""
 
     def test_negative_index_raises(self) -> None:
-        with pytest.raises(ValueError, match="negative array indices"):
+        with pytest.raises(IndexError, match="negative array indices"):
             _ = col("arr")[-1]
 
     def test_bool_key_raises(self) -> None:

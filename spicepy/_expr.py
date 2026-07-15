@@ -160,7 +160,7 @@ class Expr:
             raise TypeError("index must be int or str, not bool")
         if isinstance(key, int):
             if key < 0:
-                raise ValueError(
+                raise IndexError(
                     "negative array indices are not supported; use a non-negative "
                     "0-based index, or F.array_element() with an explicit SQL index"
                 )
