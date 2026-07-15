@@ -25,7 +25,7 @@ jobs:
         python-version: ['3.11', '3.12', '3.13', '3.14']
     name: Test pip install (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -44,7 +44,7 @@ jobs:
         python-version: ['3.11', '3.12', '3.13', '3.14']
     name: Unit tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -66,7 +66,7 @@ jobs:
         python-version: ['3.11', '3.12', '3.13', '3.14']
     name: Integration tests on ${{ matrix.os }} (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -223,7 +223,7 @@ jobs:
         python-version: ['3.12']
     name: Cloud tests (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -247,7 +247,7 @@ jobs:
         python-version: ['3.11', '3.12', '3.13', '3.14']
     name: Test coverage (Python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -261,7 +261,7 @@ jobs:
           pytest --cov=spicepy --cov-report=xml --cov-report=term-missing --ignore=tests/test_main.py tests/
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
