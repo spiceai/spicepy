@@ -285,6 +285,22 @@ class SpiceDataFrame:
         df = self.to_pandas()
         print(df.to_string(index=False))  # noqa: T201
 
+    # ------------------------------------------------------------------
+    # Writers
+    # ------------------------------------------------------------------
+
+    def write_parquet(self, path: str, **kwargs: Any) -> None:
+        """Stream this DataFrame's result to a Parquet file at ``path``."""
+        self._client.write_parquet(self._sql, path, **kwargs)
+
+    def write_csv(self, path: str, **kwargs: Any) -> None:
+        """Stream this DataFrame's result to a CSV file at ``path``."""
+        self._client.write_csv(self._sql, path, **kwargs)
+
+    def write_json(self, path: str) -> None:
+        """Write this DataFrame's result to ``path`` as newline-delimited JSON."""
+        self._client.write_json(self._sql, path)
+
     def __repr__(self) -> str:
         return f"SpiceDataFrame({self._sql})"
 

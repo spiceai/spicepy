@@ -23,6 +23,7 @@ from typing import Any
 
 from ._expr import Expr, _Case, _coerce, _Func, _Raw
 from ._expr import case as _case_builder
+from ._sql import quote_literal
 
 
 def _fn(name: str, *args: Any) -> Expr:
@@ -80,6 +81,67 @@ def approx_distinct(expr: Any) -> Expr:
 
 def array_agg(expr: Any) -> Expr:
     return _fn("ARRAY_AGG", expr)
+
+
+def stddev_pop(expr: Any) -> Expr:
+    return _fn("STDDEV_POP", expr)
+
+
+def stddev_samp(expr: Any) -> Expr:
+    return _fn("STDDEV_SAMP", expr)
+
+
+def var_pop(expr: Any) -> Expr:
+    return _fn("VAR_POP", expr)
+
+
+def var_samp(expr: Any) -> Expr:
+    return _fn("VAR_SAMP", expr)
+
+
+def approx_median(expr: Any) -> Expr:
+    return _fn("APPROX_MEDIAN", expr)
+
+
+def approx_percentile_cont(expr: Any, percentile: Any) -> Expr:
+    """Approximate continuous percentile, e.g. ``approx_percentile_cont(col("x"), 0.95)``."""
+    return _fn("APPROX_PERCENTILE_CONT", expr, percentile)
+
+
+def corr(y: Any, x: Any) -> Expr:
+    return _fn("CORR", y, x)
+
+
+def covar_pop(y: Any, x: Any) -> Expr:
+    return _fn("COVAR_POP", y, x)
+
+
+def covar_samp(y: Any, x: Any) -> Expr:
+    return _fn("COVAR_SAMP", y, x)
+
+
+def string_agg(expr: Any, delimiter: Any) -> Expr:
+    return _fn("STRING_AGG", expr, delimiter)
+
+
+def bool_and(expr: Any) -> Expr:
+    return _fn("BOOL_AND", expr)
+
+
+def bool_or(expr: Any) -> Expr:
+    return _fn("BOOL_OR", expr)
+
+
+def bit_and(expr: Any) -> Expr:
+    return _fn("BIT_AND", expr)
+
+
+def bit_or(expr: Any) -> Expr:
+    return _fn("BIT_OR", expr)
+
+
+def bit_xor(expr: Any) -> Expr:
+    return _fn("BIT_XOR", expr)
 
 
 # --- math ---
@@ -193,6 +255,25 @@ def extract(part: Any, expr: Any) -> Expr:
     return date_part(part, expr)
 
 
+def interval(value: str) -> Expr:
+    """An INTERVAL literal: ``interval("1 day")`` -> ``INTERVAL '1 day'``."""
+    return _Raw("INTERVAL " + quote_literal(value))
+
+
+def date_bin(stride: Any, source: Any, origin: Any = None) -> Expr:
+    """Bin timestamps into fixed-width buckets (time-series downsampling).
+
+    ``stride`` may be an interval string (``"15 minutes"``) or an Expr. Example::
+
+        F.date_bin("1 hour", col("ts"))
+    """
+    stride_expr = interval(stride) if isinstance(stride, str) else _coerce(stride)
+    args = [stride_expr, _coerce(source)]
+    if origin is not None:
+        args.append(_coerce(origin))
+    return _Func("DATE_BIN", args)
+
+
 # --- null / control flow ---
 
 
@@ -208,6 +289,18 @@ def nullif(a: Any, b: Any) -> Expr:
 
 def ifnull(expr: Any, default: Any) -> Expr:
     return coalesce(expr, default)
+
+
+def greatest(*exprs: Any) -> Expr:
+    if not exprs:
+        raise ValueError("greatest requires at least one argument")
+    return _fn("GREATEST", *exprs)
+
+
+def least(*exprs: Any) -> Expr:
+    if not exprs:
+        raise ValueError("least requires at least one argument")
+    return _fn("LEAST", *exprs)
 
 
 def case() -> _Case:
@@ -236,6 +329,10 @@ def percent_rank() -> _Func:
 
 def cume_dist() -> _Func:
     return _Func("CUME_DIST", [])
+
+
+def ntile(n: Any) -> _Func:
+    return _Func("NTILE", [_coerce(n)])
 
 
 def lag(expr: Any, offset: Any = 1, default: Any = None) -> _Func:
