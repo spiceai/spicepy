@@ -141,6 +141,98 @@ class TestNullHandling:
         assert F.nullif(col("a"), 0).to_sql() == 'NULLIF("a", 0)'
 
 
+class TestMoreMath:
+    def test_log2(self) -> None:
+        assert F.log2(col("x")).to_sql() == 'LOG2("x")'
+
+    def test_log10(self) -> None:
+        assert F.log10(col("x")).to_sql() == 'LOG10("x")'
+
+    def test_trunc(self) -> None:
+        assert F.trunc(col("x")).to_sql() == 'TRUNC("x")'
+
+    def test_signum(self) -> None:
+        assert F.signum(col("x")).to_sql() == 'SIGNUM("x")'
+
+    def test_pi(self) -> None:
+        assert F.pi().to_sql() == "PI()"
+
+    def test_atan2(self) -> None:
+        assert F.atan2(col("y"), col("x")).to_sql() == 'ATAN2("y", "x")'
+
+    def test_gcd(self) -> None:
+        assert F.gcd(col("a"), col("b")).to_sql() == 'GCD("a", "b")'
+
+    def test_sin(self) -> None:
+        assert F.sin(col("x")).to_sql() == 'SIN("x")'
+
+    def test_degrees(self) -> None:
+        assert F.degrees(col("x")).to_sql() == 'DEGREES("x")'
+
+
+class TestMoreStrings:
+    def test_lpad_two_arg(self) -> None:
+        assert F.lpad(col("c"), 5).to_sql() == 'LPAD("c", 5)'
+
+    def test_lpad_three_arg(self) -> None:
+        assert F.lpad(col("c"), 5, "*").to_sql() == """LPAD("c", 5, '*')"""
+
+    def test_split_part(self) -> None:
+        assert F.split_part(col("c"), ",", 1).to_sql() == """SPLIT_PART("c", ',', 1)"""
+
+    def test_initcap(self) -> None:
+        assert F.initcap(col("c")).to_sql() == 'INITCAP("c")'
+
+    def test_regexp_replace(self) -> None:
+        assert (
+            F.regexp_replace(col("c"), "a", "b").to_sql()
+            == """REGEXP_REPLACE("c", 'a', 'b')"""
+        )
+
+    def test_regexp_replace_with_flags(self) -> None:
+        assert (
+            F.regexp_replace(col("c"), "a", "b", "g").to_sql()
+            == """REGEXP_REPLACE("c", 'a', 'b', 'g')"""
+        )
+
+    def test_reverse(self) -> None:
+        assert F.reverse(col("c")).to_sql() == 'REVERSE("c")'
+
+    def test_concat_ws(self) -> None:
+        assert (
+            F.concat_ws("-", col("a"), col("b")).to_sql()
+            == """CONCAT_WS('-', "a", "b")"""
+        )
+
+    def test_left(self) -> None:
+        assert F.left(col("c"), 3).to_sql() == 'LEFT("c", 3)'
+
+
+class TestMoreDateTime:
+    def test_to_timestamp(self) -> None:
+        assert F.to_timestamp(col("s")).to_sql() == 'TO_TIMESTAMP("s")'
+
+    def test_to_timestamp_with_format(self) -> None:
+        assert (
+            F.to_timestamp(col("s"), "%Y-%m-%d").to_sql()
+            == """TO_TIMESTAMP("s", '%Y-%m-%d')"""
+        )
+
+    def test_to_date(self) -> None:
+        assert F.to_date(col("s")).to_sql() == 'TO_DATE("s")'
+
+    def test_from_unixtime(self) -> None:
+        assert F.from_unixtime(col("ts")).to_sql() == 'FROM_UNIXTIME("ts")'
+
+    def test_make_date(self) -> None:
+        assert F.make_date(2024, 1, 15).to_sql() == "MAKE_DATE(2024, 1, 15)"
+
+
+class TestNvl:
+    def test_nvl(self) -> None:
+        assert F.nvl(col("a"), 0).to_sql() == 'NVL("a", 0)'
+
+
 class TestArrays:
     def test_make_array(self) -> None:
         assert F.make_array(1, 2, 3).to_sql() == "MAKE_ARRAY(1, 2, 3)"

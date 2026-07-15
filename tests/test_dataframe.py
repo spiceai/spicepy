@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -252,6 +253,54 @@ class TestValuesDataFrame:
     def test_mismatched_columns_raises(self, client: MagicMock) -> None:
         with pytest.raises(ValueError, match="same columns"):
             values_dataframe(client, [{"a": 1}, {"b": 2}])
+
+
+class TestColumnSelection:
+    def test_getitem_single(self, df: SpiceDataFrame) -> None:
+        assert df["city"].to_sql() == 'SELECT "city" FROM (SELECT * FROM "trips")'
+
+    def test_getitem_list(self, df: SpiceDataFrame) -> None:
+        assert df[["city", "fare"]].to_sql() == (
+            'SELECT "city", "fare" FROM (SELECT * FROM "trips")'
+        )
+
+    def test_getitem_empty_list_raises(self, df: SpiceDataFrame) -> None:
+        with pytest.raises(ValueError, match="at least one column"):
+            _ = df[[]]
+
+    def test_getitem_bad_key_raises(self, df: SpiceDataFrame) -> None:
+        with pytest.raises(TypeError, match="column name or list"):
+            _ = df[5]
+
+
+class TestSetOpAll:
+    def test_intersect_all(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        other = SpiceDataFrame(client, 'SELECT * FROM "t2"')
+        assert "INTERSECT ALL" in df.intersect(other, all=True).to_sql()
+
+    def test_except_all(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        other = SpiceDataFrame(client, 'SELECT * FROM "t2"')
+        assert "EXCEPT ALL" in df.except_(other, all=True).to_sql()
+
+
+class TestReprHtml:
+    def test_repr_html(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        client.query_pandas.return_value = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+        html = df._repr_html_()
+        assert "<table" in html
+        assert "SpiceDataFrame preview" in html
+        # the preview came from a LIMIT query
+        assert "LIMIT" in client.query_pandas.call_args[0][0]
+
+
+class TestArrowCStream:
+    def test_arrow_c_stream_roundtrips(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        table = pa.table({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+        client.query_arrow.return_value = table
+        result = pa.RecordBatchReader.from_stream(df).read_all()
+        assert result.equals(table)
 
 
 class TestUnnest:
