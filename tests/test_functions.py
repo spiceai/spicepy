@@ -233,6 +233,83 @@ class TestNvl:
         assert F.nvl(col("a"), 0).to_sql() == 'NVL("a", 0)'
 
 
+class TestMathCoverage:
+    @pytest.mark.parametrize(
+        "fn, name",
+        [
+            (F.cos, "COS"),
+            (F.tan, "TAN"),
+            (F.asin, "ASIN"),
+            (F.acos, "ACOS"),
+            (F.atan, "ATAN"),
+            (F.sinh, "SINH"),
+            (F.cosh, "COSH"),
+            (F.tanh, "TANH"),
+            (F.cot, "COT"),
+            (F.cbrt, "CBRT"),
+            (F.radians, "RADIANS"),
+            (F.factorial, "FACTORIAL"),
+            (F.isnan, "ISNAN"),
+            (F.iszero, "ISZERO"),
+        ],
+    )
+    def test_unary_math(self, fn, name: str) -> None:
+        assert fn(col("x")).to_sql() == f'{name}("x")'
+
+    def test_lcm(self) -> None:
+        assert F.lcm(col("a"), col("b")).to_sql() == 'LCM("a", "b")'
+
+    def test_nanvl(self) -> None:
+        assert F.nanvl(col("x"), 0).to_sql() == 'NANVL("x", 0)'
+
+
+class TestStringCoverage:
+    @pytest.mark.parametrize(
+        "fn, name",
+        [
+            (F.ltrim, "LTRIM"),
+            (F.rtrim, "RTRIM"),
+            (F.btrim, "BTRIM"),
+            (F.ascii, "ASCII"),
+            (F.to_hex, "TO_HEX"),
+        ],
+    )
+    def test_unary_string(self, fn, name: str) -> None:
+        assert fn(col("c")).to_sql() == f'{name}("c")'
+
+    def test_rpad_two_arg(self) -> None:
+        assert F.rpad(col("c"), 5).to_sql() == 'RPAD("c", 5)'
+
+    def test_rpad_three_arg(self) -> None:
+        assert F.rpad(col("c"), 5, "-").to_sql() == """RPAD("c", 5, '-')"""
+
+    def test_right(self) -> None:
+        assert F.right(col("c"), 3).to_sql() == 'RIGHT("c", 3)'
+
+    def test_repeat(self) -> None:
+        assert F.repeat(col("c"), 2).to_sql() == 'REPEAT("c", 2)'
+
+    def test_translate(self) -> None:
+        assert (
+            F.translate(col("c"), "abc", "xyz").to_sql()
+            == """TRANSLATE("c", 'abc', 'xyz')"""
+        )
+
+    def test_strpos(self) -> None:
+        assert F.strpos(col("c"), "x").to_sql() == """STRPOS("c", 'x')"""
+
+    def test_chr(self) -> None:
+        assert F.chr(65).to_sql() == "CHR(65)"
+
+
+class TestDateTimeCoverage:
+    def test_to_unixtime(self) -> None:
+        assert F.to_unixtime(col("ts")).to_sql() == 'TO_UNIXTIME("ts")'
+
+    def test_to_char(self) -> None:
+        assert F.to_char(col("ts"), "%Y").to_sql() == """TO_CHAR("ts", '%Y')"""
+
+
 class TestArrays:
     def test_make_array(self) -> None:
         assert F.make_array(1, 2, 3).to_sql() == "MAKE_ARRAY(1, 2, 3)"

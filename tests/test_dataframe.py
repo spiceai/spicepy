@@ -272,6 +272,10 @@ class TestColumnSelection:
         with pytest.raises(TypeError, match="column name or list"):
             _ = df[5]
 
+    def test_getitem_non_str_element_raises(self, df: SpiceDataFrame) -> None:
+        with pytest.raises(TypeError, match="must be strings"):
+            _ = df[["a", 1]]
+
 
 class TestSetOpAll:
     def test_intersect_all(self, df: SpiceDataFrame, client: MagicMock) -> None:
