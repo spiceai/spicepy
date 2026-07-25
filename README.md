@@ -128,6 +128,39 @@ Once a `Client` is obtained queries can be made using the `query()` function. Th
 
 A custom timeout can be set by passing the `timeout` parameter in the `query` function call. If no timeout is specified, it will default to a 10 min timeout then cancel the query, and a TimeoutError exception will be raised.
 
+### Runtime Health and Status
+
+`is_ready()` reports whether the runtime is ready to serve queries — useful for waiting
+on a runtime to come up before querying it:
+
+```python
+from spicepy import Client
+
+client = Client(http_url="http://127.0.0.1:8090")
+
+if not client.is_ready():
+    print("runtime is not ready yet")
+```
+
+When you need to know *which* component is not ready, `runtime_status()` reports each
+runtime connection separately:
+
+```python
+for component in client.runtime_status():
+    print(f"{component.name} ({component.endpoint}): {component.status}")
+
+# http (127.0.0.1:8090): Ready
+# flight (127.0.0.1:50051): Ready
+# metrics (N/A): Disabled
+# opentelemetry (127.0.0.1:50051): Ready
+```
+
+Each `ConnectionDetails` carries the component `name` (`http`, `flight`, `metrics` or
+`opentelemetry`), its `endpoint`, and its `status` — a `ComponentStatus` of
+`Initializing`, `Ready`, `Disabled`, `Error`, `Refreshing`, `ShuttingDown` or
+`NotLoaded`. `component.is_ready` is shorthand for a `Ready` status. A status added by
+a future runtime is preserved as a plain string rather than raising.
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.
