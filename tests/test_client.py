@@ -1580,6 +1580,34 @@ class TestClientBatchesAndPydict:
         batches = list(client.query_batches("SELECT 1"))
         assert batches == [batch1, batch2]
 
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    @patch("spicepy._client._ADBCClient")
+    def test_query_batches_with_params_streams(
+        self,
+        mock_adbc_class: MagicMock,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        """Parameterized batch streaming goes through the ADBC reader."""
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        batch1 = pa.record_batch({"x": [1, 2]})
+        batch2 = pa.record_batch({"x": [3, 4]})
+        mock_adbc = MagicMock()
+        mock_adbc.query_with_params.return_value = iter([batch1, batch2])
+        mock_adbc_class.return_value = mock_adbc
+
+        client = Client()
+        batches = list(client.query_batches("SELECT * FROM t WHERE x > $1", params=[0]))
+
+        assert batches == [batch1, batch2]
+        mock_adbc.query_with_params.assert_called_once_with(
+            "SELECT * FROM t WHERE x > $1", [0]
+        )
+
 
 class TestClientDataFrameEntry:
     @patch("spicepy._client._SpiceFlight")

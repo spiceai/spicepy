@@ -76,6 +76,10 @@ reader = client.query_with_params(
 )
 ```
 
+The reader returned by `query_with_params` streams: batches arrive as you consume
+them, so the full result is never held in memory at once. Iterate it (as above)
+rather than calling `read_all()` when the result is large.
+
 #### Multiple Parameters
 
 ```python
@@ -113,6 +117,30 @@ reader = client.query_with_params(
 - **Null**: `pa.null()`
 
 See the [PyArrow documentation](https://arrow.apache.org/docs/python/api/datatypes.html) for the full list of available types.
+
+### Large Result Sets
+
+`query_arrow`, `query_pandas`, `query_polars`, `query_pylist` and `query_pydict`
+materialize the whole result in memory. For results too large to hold at once,
+use `query_batches`, which yields Arrow `RecordBatch`es as they stream in and
+keeps memory bounded by the in-flight batches rather than the result size:
+
+```python
+from spicepy import Client
+
+client = Client()
+
+total = 0
+for batch in client.query_batches('SELECT * FROM taxi_trips'):
+    total += batch.num_rows
+
+# Parameterized queries stream too
+for batch in client.query_batches(
+    'SELECT * FROM taxi_trips WHERE trip_distance > $1',
+    params=[5.0],
+):
+    total += batch.num_rows
+```
 
 Querying data is done through a `Client` object that initialize the connection with Spice endpoint. `Client` has the following arguments:
 

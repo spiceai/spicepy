@@ -592,13 +592,20 @@ class Client:
         self,
         sql: str,
         *,
+        params: list[Any] | None = None,
         timeout: int | None = None,
     ) -> Iterator[pa.RecordBatch]:
         """Execute a SQL query and yield Arrow RecordBatches as they stream in.
 
         Unlike :meth:`query_arrow`, this does not materialize the full result
-        in memory before returning.
+        in memory before returning, which makes it the right choice for result
+        sets too large to hold in memory.
+
+        See :meth:`query_arrow` for argument semantics.
         """
+        if params is not None:
+            yield from self.query_with_params(sql, params)
+            return
         kwargs: dict[str, Any] = {}
         if timeout is not None:
             kwargs["timeout"] = timeout
