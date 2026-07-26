@@ -43,6 +43,10 @@ class Expr:
     def cast(self, arrow_type: Any) -> Expr:
         return _Cast(self, _arrow_type_to_sql(arrow_type))
 
+    def try_cast(self, arrow_type: Any) -> Expr:
+        """Like :meth:`cast` but yields NULL instead of erroring on failure."""
+        return _Cast(self, _arrow_type_to_sql(arrow_type), is_try=True)
+
     # --- comparison (DSL: returns Expr, not bool — see class docstring) ---
 
     def __eq__(self, other: object) -> Expr:  # type: ignore[override]
@@ -124,6 +128,49 @@ class Expr:
 
     def between(self, lo: Any, hi: Any) -> Expr:
         return _Between(self, _coerce(lo), _coerce(hi))
+
+    # --- pattern matching ---
+
+    def like(self, pattern: Any) -> Expr:
+        return _BinOp(self, "LIKE", _coerce(pattern))
+
+    def ilike(self, pattern: Any) -> Expr:
+        return _BinOp(self, "ILIKE", _coerce(pattern))
+
+    def not_like(self, pattern: Any) -> Expr:
+        return _BinOp(self, "NOT LIKE", _coerce(pattern))
+
+    def not_ilike(self, pattern: Any) -> Expr:
+        return _BinOp(self, "NOT ILIKE", _coerce(pattern))
+
+    # --- element / field access ---
+
+    def __getitem__(self, key: Any) -> Expr:
+        """Access an array element (0-indexed ``int``) or struct field (``str``).
+
+        Array indexing follows Python's 0-based convention and compiles to
+        DataFusion's 1-based ``array_element`` — so ``col("a")[0]`` is the first
+        element. Negative indices are rejected (the 0-based → 1-based mapping
+        cannot express from-the-end access); use
+        :func:`spicepy.functions.array_element` with an explicit SQL index if you
+        need it. Struct fields compile to ``get_field``. For slicing, use
+        :func:`spicepy.functions.array_slice`.
+        """
+        if isinstance(key, bool):
+            raise TypeError("index must be int or str, not bool")
+        if isinstance(key, int):
+            if key < 0:
+                raise IndexError(
+                    "negative array indices are not supported; use a non-negative "
+                    "0-based index, or F.array_element() with an explicit SQL index"
+                )
+            return _Func("ARRAY_ELEMENT", [self, _Literal(key + 1)])
+        if isinstance(key, str):
+            return _Func("GET_FIELD", [self, _Literal(key)])
+        raise TypeError(
+            "index must be int (array element) or str (struct field), "
+            f"got {type(key).__name__}"
+        )
 
     # --- sort qualifier (used inside sort()/order_by) ---
 
@@ -272,39 +319,60 @@ class _Alias(Expr):
 
 
 class _Cast(Expr):
-    __slots__ = ("inner", "type_sql")
+    __slots__ = ("inner", "is_try", "type_sql")
 
-    def __init__(self, inner: Expr, type_sql: str) -> None:
+    def __init__(self, inner: Expr, type_sql: str, is_try: bool = False) -> None:
         self.inner = inner
         self.type_sql = type_sql
+        self.is_try = is_try
 
     def to_sql(self) -> str:
-        return f"CAST({self.inner.to_sql()} AS {self.type_sql})"
+        func = "TRY_CAST" if self.is_try else "CAST"
+        return f"{func}({self.inner.to_sql()} AS {self.type_sql})"
 
 
 class _Func(Expr):
     """A scalar/aggregate function call: ``name(arg, arg, ...)``."""
 
-    __slots__ = ("args", "distinct", "name")
+    __slots__ = ("args", "distinct", "filter_pred", "name")
 
-    def __init__(self, name: str, args: list[Expr], distinct: bool = False) -> None:
+    def __init__(
+        self,
+        name: str,
+        args: list[Expr],
+        distinct: bool = False,
+        filter_pred: Expr | None = None,
+    ) -> None:
         self.name = name
         self.args = args
         self.distinct = distinct
+        self.filter_pred = filter_pred
 
     def to_sql(self) -> str:
         prefix = "DISTINCT " if self.distinct else ""
         if not self.args:
-            return f"{self.name}()"
-        rendered = ", ".join(a.to_sql() for a in self.args)
-        return f"{self.name}({prefix}{rendered})"
+            call = f"{self.name}()"
+        else:
+            rendered = ", ".join(a.to_sql() for a in self.args)
+            call = f"{self.name}({prefix}{rendered})"
+        if self.filter_pred is not None:
+            call = f"{call} FILTER (WHERE {self.filter_pred.to_sql()})"
+        return call
+
+    def filter(self, predicate: Expr) -> _Func:
+        """Attach a ``FILTER (WHERE ...)`` clause to this aggregate call.
+
+        Example: ``F.sum(col("amt")).filter(col("status") == "paid")``.
+        """
+        return _Func(self.name, self.args, self.distinct, filter_pred=predicate)
 
     def over(
         self,
         partition_by: list[Expr] | None = None,
         order_by: list[Expr | _SortExpr] | None = None,
+        frame: WindowFrame | None = None,
     ) -> Expr:
-        return _Window(self, partition_by or [], order_by or [])
+        return _Window(self, partition_by or [], order_by or [], frame)
 
 
 class _Case(Expr):
@@ -337,17 +405,19 @@ class _Case(Expr):
 
 
 class _Window(Expr):
-    __slots__ = ("func", "order_by", "partition_by")
+    __slots__ = ("frame", "func", "order_by", "partition_by")
 
     def __init__(
         self,
         func: _Func,
         partition_by: list[Expr],
         order_by: list[Expr | _SortExpr],
+        frame: WindowFrame | None = None,
     ) -> None:
         self.func = func
         self.partition_by = partition_by
         self.order_by = order_by
+        self.frame = frame
 
     def to_sql(self) -> str:
         parts = []
@@ -357,7 +427,71 @@ class _Window(Expr):
             )
         if self.order_by:
             parts.append("ORDER BY " + ", ".join(_sort_sql(e) for e in self.order_by))
+        if self.frame is not None:
+            parts.append(self.frame.to_sql())
         return f"{self.func.to_sql()} OVER ({' '.join(parts)})"
+
+
+class WindowFrame:
+    """A window frame: ``ROWS|RANGE|GROUPS BETWEEN <start> AND <end>``.
+
+    Passed to :meth:`Expr.over` to bound a window function (running totals,
+    moving averages). Bounds follow the datafusion-python convention:
+
+    * ``None`` — unbounded (``UNBOUNDED PRECEDING`` at the start,
+      ``UNBOUNDED FOLLOWING`` at the end).
+    * ``0`` — ``CURRENT ROW``.
+    * ``n > 0`` — ``n PRECEDING`` at the start, ``n FOLLOWING`` at the end.
+
+    Example — a trailing 7-row moving average::
+
+        F.avg(col("v")).over(
+            order_by=[col("ts")],
+            frame=WindowFrame("rows", 6, 0),
+        )
+    """
+
+    __slots__ = ("end_bound", "start_bound", "units")
+
+    _UNITS = ("rows", "range", "groups")
+
+    def __init__(
+        self,
+        units: str,
+        start_bound: int | None = None,
+        end_bound: int | None = None,
+    ) -> None:
+        normalized = units.lower()
+        if normalized not in self._UNITS:
+            raise ValueError(
+                f"Unknown window frame units {units!r}; "
+                f"expected one of {list(self._UNITS)}"
+            )
+        if start_bound is not None and start_bound < 0:
+            raise ValueError("start_bound must be None or a non-negative integer")
+        if end_bound is not None and end_bound < 0:
+            raise ValueError("end_bound must be None or a non-negative integer")
+        self.units = normalized
+        self.start_bound = start_bound
+        self.end_bound = end_bound
+
+    def to_sql(self) -> str:
+        return (
+            f"{self.units.upper()} BETWEEN "
+            f"{self._bound_sql(self.start_bound, 'PRECEDING')} AND "
+            f"{self._bound_sql(self.end_bound, 'FOLLOWING')}"
+        )
+
+    @staticmethod
+    def _bound_sql(bound: int | None, direction: str) -> str:
+        if bound is None:
+            return f"UNBOUNDED {direction}"
+        if bound == 0:
+            return "CURRENT ROW"
+        return f"{bound} {direction}"
+
+    def __repr__(self) -> str:
+        return f"WindowFrame({self.to_sql()})"
 
 
 class _SortExpr:

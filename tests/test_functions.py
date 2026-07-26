@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from spicepy import col
+import pytest
+
+from spicepy import WindowFrame, col, lit
 from spicepy import functions as F
 
 
@@ -25,6 +27,58 @@ class TestAggregates:
 
     def test_count_distinct(self) -> None:
         assert F.count_distinct(col("x")).to_sql() == 'COUNT(DISTINCT "x")'
+
+
+class TestAnalyticsAggregates:
+    def test_stddev_pop(self) -> None:
+        assert F.stddev_pop(col("x")).to_sql() == 'STDDEV_POP("x")'
+
+    def test_var_samp(self) -> None:
+        assert F.var_samp(col("x")).to_sql() == 'VAR_SAMP("x")'
+
+    def test_approx_percentile_cont(self) -> None:
+        assert (
+            F.approx_percentile_cont(col("x"), 0.95).to_sql()
+            == 'APPROX_PERCENTILE_CONT("x", 0.95)'
+        )
+
+    def test_corr(self) -> None:
+        assert F.corr(col("y"), col("x")).to_sql() == 'CORR("y", "x")'
+
+    def test_string_agg(self) -> None:
+        assert F.string_agg(col("c"), ", ").to_sql() == """STRING_AGG("c", ', ')"""
+
+    def test_bool_and(self) -> None:
+        assert F.bool_and(col("f")).to_sql() == 'BOOL_AND("f")'
+
+    def test_bit_or(self) -> None:
+        assert F.bit_or(col("m")).to_sql() == 'BIT_OR("m")'
+
+
+class TestAggregateFilter:
+    def test_filter(self) -> None:
+        expr = F.sum(col("amt")).filter(col("status") == "paid")
+        assert expr.to_sql() == """SUM("amt") FILTER (WHERE ("status" = 'paid'))"""
+
+    def test_filter_preserves_distinct(self) -> None:
+        expr = F.count_distinct(col("u")).filter(col("active"))
+        assert expr.to_sql() == 'COUNT(DISTINCT "u") FILTER (WHERE "active")'
+
+
+class TestConditional:
+    def test_greatest(self) -> None:
+        assert F.greatest(col("a"), col("b")).to_sql() == 'GREATEST("a", "b")'
+
+    def test_least(self) -> None:
+        assert F.least(col("a"), col("b"), 0).to_sql() == 'LEAST("a", "b", 0)'
+
+    def test_greatest_requires_arg(self) -> None:
+        with pytest.raises(ValueError, match="at least one"):
+            F.greatest()
+
+    def test_least_requires_arg(self) -> None:
+        with pytest.raises(ValueError, match="at least one"):
+            F.least()
 
 
 class TestMath:
@@ -65,6 +119,19 @@ class TestDateTime:
     def test_current_date(self) -> None:
         assert F.current_date().to_sql() == "CURRENT_DATE()"
 
+    def test_interval(self) -> None:
+        assert F.interval("1 day").to_sql() == "INTERVAL '1 day'"
+
+    def test_date_bin(self) -> None:
+        assert F.date_bin("1 hour", col("ts")).to_sql() == (
+            """DATE_BIN(INTERVAL '1 hour', "ts")"""
+        )
+
+    def test_date_bin_with_origin(self) -> None:
+        assert F.date_bin("1 day", col("ts"), col("origin")).to_sql() == (
+            """DATE_BIN(INTERVAL '1 day', "ts", "origin")"""
+        )
+
 
 class TestNullHandling:
     def test_coalesce(self) -> None:
@@ -72,6 +139,85 @@ class TestNullHandling:
 
     def test_nullif(self) -> None:
         assert F.nullif(col("a"), 0).to_sql() == 'NULLIF("a", 0)'
+
+
+class TestArrays:
+    def test_make_array(self) -> None:
+        assert F.make_array(1, 2, 3).to_sql() == "MAKE_ARRAY(1, 2, 3)"
+
+    def test_array_alias(self) -> None:
+        assert F.array(col("a"), col("b")).to_sql() == 'MAKE_ARRAY("a", "b")'
+
+    def test_array_element(self) -> None:
+        assert F.array_element(col("a"), 1).to_sql() == 'ARRAY_ELEMENT("a", 1)'
+
+    def test_array_length(self) -> None:
+        assert F.array_length(col("a")).to_sql() == 'ARRAY_LENGTH("a")'
+
+    def test_array_length_with_dimension(self) -> None:
+        assert F.array_length(col("a"), 1).to_sql() == 'ARRAY_LENGTH("a", 1)'
+
+    def test_array_append(self) -> None:
+        assert F.array_append(col("a"), 9).to_sql() == 'ARRAY_APPEND("a", 9)'
+
+    def test_array_prepend(self) -> None:
+        assert F.array_prepend(0, col("a")).to_sql() == 'ARRAY_PREPEND(0, "a")'
+
+    def test_array_concat(self) -> None:
+        assert F.array_concat(col("a"), col("b")).to_sql() == 'ARRAY_CONCAT("a", "b")'
+
+    def test_array_has(self) -> None:
+        assert (
+            F.array_has(col("tags"), "urgent").to_sql()
+            == """ARRAY_HAS("tags", 'urgent')"""
+        )
+
+    def test_array_slice(self) -> None:
+        assert F.array_slice(col("a"), 1, 3).to_sql() == 'ARRAY_SLICE("a", 1, 3)'
+
+    def test_array_slice_with_stride(self) -> None:
+        assert F.array_slice(col("a"), 1, 5, 2).to_sql() == 'ARRAY_SLICE("a", 1, 5, 2)'
+
+    def test_array_to_string(self) -> None:
+        assert (
+            F.array_to_string(col("a"), ",").to_sql() == """ARRAY_TO_STRING("a", ',')"""
+        )
+
+    def test_cardinality(self) -> None:
+        assert F.cardinality(col("a")).to_sql() == 'CARDINALITY("a")'
+
+    def test_flatten(self) -> None:
+        assert F.flatten(col("a")).to_sql() == 'FLATTEN("a")'
+
+    def test_array_distance(self) -> None:
+        assert (
+            F.array_distance(col("a"), col("b")).to_sql() == 'ARRAY_DISTANCE("a", "b")'
+        )
+
+    def test_array_distance_with_literal_vector(self) -> None:
+        # embeddings/vector use case: a literal list renders as MAKE_ARRAY
+        assert (
+            F.array_distance(col("embedding"), lit([0.1, 0.2])).to_sql()
+            == 'ARRAY_DISTANCE("embedding", MAKE_ARRAY(0.1, 0.2))'
+        )
+
+
+class TestStructs:
+    def test_struct(self) -> None:
+        assert F.struct(col("a"), col("b")).to_sql() == 'STRUCT("a", "b")'
+
+    def test_named_struct(self) -> None:
+        assert (
+            F.named_struct(x=col("a"), y=1).to_sql()
+            == """NAMED_STRUCT('x', "a", 'y', 1)"""
+        )
+
+    def test_named_struct_requires_field(self) -> None:
+        with pytest.raises(ValueError, match="at least one field"):
+            F.named_struct()
+
+    def test_get_field(self) -> None:
+        assert F.get_field(col("s"), "city").to_sql() == """GET_FIELD("s", 'city')"""
 
 
 class TestWindowFunctions:
@@ -88,3 +234,38 @@ class TestWindowFunctions:
 
     def test_lag_with_default(self) -> None:
         assert F.lag(col("x"), 2, 0).over().to_sql() == 'LAG("x", 2, 0) OVER ()'
+
+    def test_ntile(self) -> None:
+        assert (
+            F.ntile(4).over(order_by=[col("x")]).to_sql()
+            == 'NTILE(4) OVER (ORDER BY "x")'
+        )
+
+    def test_over_with_frame(self) -> None:
+        sql = (
+            F.sum(col("v"))
+            .over(
+                order_by=[col("ts")],
+                frame=WindowFrame("rows", None, 0),
+            )
+            .to_sql()
+        )
+        assert sql == (
+            'SUM("v") OVER (ORDER BY "ts" '
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+        )
+
+    def test_partition_order_and_frame(self) -> None:
+        sql = (
+            F.avg(col("v"))
+            .over(
+                partition_by=[col("sensor")],
+                order_by=[col("ts")],
+                frame=WindowFrame("rows", 6, 0),
+            )
+            .to_sql()
+        )
+        assert sql == (
+            'AVG("v") OVER (PARTITION BY "sensor" ORDER BY "ts" '
+            "ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)"
+        )
