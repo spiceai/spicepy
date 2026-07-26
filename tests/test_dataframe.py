@@ -254,6 +254,139 @@ class TestValuesDataFrame:
             values_dataframe(client, [{"a": 1}, {"b": 2}])
 
 
+class TestUnnest:
+    def test_unnest_single(self, df: SpiceDataFrame) -> None:
+        assert df.unnest("tags").to_sql() == (
+            'SELECT * REPLACE (unnest("tags") AS "tags") FROM (SELECT * FROM "trips")'
+        )
+
+    def test_unnest_multiple(self, df: SpiceDataFrame) -> None:
+        sql = df.unnest("a", "b").to_sql()
+        assert 'unnest("a") AS "a", unnest("b") AS "b"' in sql
+
+    def test_unnest_empty_raises(self, df: SpiceDataFrame) -> None:
+        with pytest.raises(ValueError, match="at least one column"):
+            df.unnest()
+
+
+class TestJoinAdvanced:
+    @pytest.fixture
+    def other(self, client: MagicMock) -> SpiceDataFrame:
+        return SpiceDataFrame(client, 'SELECT * FROM "users"')
+
+    def test_left_on_right_on(self, df: SpiceDataFrame, other: SpiceDataFrame) -> None:
+        sql = df.join(other, left_on="user_id", right_on="id").to_sql()
+        assert '"l"."user_id" = "r"."id"' in sql
+        assert "INNER JOIN" in sql
+
+    def test_left_on_right_on_multi(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        sql = df.join(other, left_on=["a", "b"], right_on=["x", "y"]).to_sql()
+        assert '"l"."a" = "r"."x" AND "l"."b" = "r"."y"' in sql
+
+    def test_on_and_left_on_conflict(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        with pytest.raises(ValueError, match="not both"):
+            df.join(other, on="id", left_on="a", right_on="b")
+
+    def test_left_on_without_right_on(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        with pytest.raises(ValueError, match="provided together"):
+            df.join(other, left_on="a")
+
+    def test_join_missing_on_raises(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        with pytest.raises(ValueError, match="join requires"):
+            df.join(other)
+
+    def test_join_on_predicate(self, df: SpiceDataFrame, other: SpiceDataFrame) -> None:
+        sql = df.join_on(
+            other, col("user_id", "l") == col("id", "r"), how="left"
+        ).to_sql()
+        assert 'ON ("l"."user_id" = "r"."id")' in sql
+        assert "LEFT JOIN" in sql
+
+    def test_join_on_multiple_predicates(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        sql = df.join_on(
+            other,
+            col("a", "l") == col("a", "r"),
+            col("b", "l") > col("b", "r"),
+        ).to_sql()
+        assert " AND " in sql
+
+    def test_join_on_requires_predicate(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        with pytest.raises(ValueError, match="at least one predicate"):
+            df.join_on(other)
+
+    def test_join_on_rejects_cross(
+        self, df: SpiceDataFrame, other: SpiceDataFrame
+    ) -> None:
+        with pytest.raises(ValueError, match="does not support"):
+            df.join_on(other, col("a", "l") == col("a", "r"), how="cross")
+
+
+class TestDescribe:
+    @staticmethod
+    def _mock_schema(client: MagicMock, schema: pa.Schema) -> None:
+        reader = MagicMock()
+        reader.read_all.return_value.schema = schema
+        client.query.return_value = reader
+
+    def test_describe_numeric(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        self._mock_schema(
+            client,
+            pa.schema([("a", pa.int64()), ("b", pa.float64()), ("name", pa.string())]),
+        )
+        sql = df.describe().to_sql()
+        assert "UNION ALL" in sql
+        assert "'count'" in sql and "'mean'" in sql and "'stddev'" in sql
+        assert 'AVG(CAST("a" AS DOUBLE))' in sql
+        assert 'AS "statistic"' in sql
+        # non-numeric column is excluded from the summary
+        assert '"name"' not in sql
+
+    def test_describe_no_numeric_raises(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        self._mock_schema(client, pa.schema([("name", pa.string())]))
+        with pytest.raises(ValueError, match="no numeric columns"):
+            df.describe()
+
+
+class TestWriters:
+    def test_write_parquet_delegates(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        df.write_parquet("out.parquet")
+        client.write_parquet.assert_called_once_with(
+            'SELECT * FROM "trips"', "out.parquet"
+        )
+
+    def test_write_parquet_passes_kwargs(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        df.write_parquet("out.parquet", compression="snappy")
+        client.write_parquet.assert_called_once_with(
+            'SELECT * FROM "trips"', "out.parquet", compression="snappy"
+        )
+
+    def test_write_csv_delegates(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        df.write_csv("out.csv")
+        client.write_csv.assert_called_once_with('SELECT * FROM "trips"', "out.csv")
+
+    def test_write_json_delegates(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        df.write_json("out.json")
+        client.write_json.assert_called_once_with('SELECT * FROM "trips"', "out.json")
+
+
 class TestRepr:
     def test_repr(self, df: SpiceDataFrame) -> None:
         assert "SELECT" in repr(df)

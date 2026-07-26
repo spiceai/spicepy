@@ -8,7 +8,7 @@ Spice.ai client library.
 from . import functions
 from ._client import Client
 from ._dataframe import SpiceDataFrame
-from ._expr import Expr, case, col, lit
+from ._expr import Expr, WindowFrame, case, col, lit
 from ._http import RefreshOpts
 
 __all__ = [
@@ -16,6 +16,7 @@ __all__ = [
     "Expr",
     "RefreshOpts",
     "SpiceDataFrame",
+    "WindowFrame",
     "case",
     "col",
     "functions",

@@ -68,7 +68,11 @@ polars = [
 # ============== Tool Configuration ==============
 
 [tool.mypy]
-python_version = "3.11"
+# No explicit python_version: mypy targets the running interpreter, so each CI
+# matrix job (3.11–3.14) type-checks against its own version and the 3.11 job
+# still enforces the 3.11 floor. Pinning to 3.11 made mypy reject PEP 695 `type`
+# statements that recent third-party stubs (e.g. numpy) ship when checked on
+# Python 3.12+.
 warn_return_any = true
 warn_unused_configs = true
 warn_redundant_casts = true
