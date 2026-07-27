@@ -50,7 +50,9 @@ class TestConnectionDetails:
 
     def test_from_dict(self) -> None:
         """Parses a single /v1/status entry."""
-        details = ConnectionDetails.from_dict({"name": "flight", "endpoint": "127.0.0.1:50051", "status": "Ready"})
+        details = ConnectionDetails.from_dict(
+            {"name": "flight", "endpoint": "127.0.0.1:50051", "status": "Ready"}
+        )
         assert details.name == "flight"
         assert details.endpoint == "127.0.0.1:50051"
         assert details.status == ComponentStatus.READY
@@ -58,7 +60,9 @@ class TestConnectionDetails:
 
     def test_from_dict_not_ready(self) -> None:
         """A non-Ready component reports is_ready False."""
-        details = ConnectionDetails.from_dict({"name": "metrics", "endpoint": "N/A", "status": "Disabled"})
+        details = ConnectionDetails.from_dict(
+            {"name": "metrics", "endpoint": "N/A", "status": "Disabled"}
+        )
         assert details.status == ComponentStatus.DISABLED
         assert not details.is_ready
 
@@ -71,7 +75,9 @@ class TestConnectionDetails:
 
     def test_unknown_status_is_not_ready(self) -> None:
         """An unrecognized status is never treated as ready."""
-        details = ConnectionDetails.from_dict({"name": "flight", "endpoint": "x", "status": "SomethingNew"})
+        details = ConnectionDetails.from_dict(
+            {"name": "flight", "endpoint": "x", "status": "SomethingNew"}
+        )
         assert details.status == "SomethingNew"
         assert not details.is_ready
 
