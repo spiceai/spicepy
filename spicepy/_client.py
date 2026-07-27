@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import certifi
 import pyarrow as pa
+from requests.exceptions import HTTPError
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -24,15 +25,13 @@ from pyarrow._flight import (
 
 from . import config
 from ._http import HttpRequests, RefreshOpts
-from ._search import SearchResponse, build_search_body
+from ._search import SearchResponse, build_search_body, search_error_message
+from .error import SpiceAIError
 from .params import infer_arrow_type
 
 
 def is_macos_arm64() -> bool:
-    return (
-        platform.platform().lower().startswith("macos")
-        and platform.machine() == "arm64"
-    )
+    return platform.platform().lower().startswith("macos") and platform.machine() == "arm64"
 
 
 try:
@@ -96,9 +95,7 @@ class _ADBCClient:
         # Add authentication if API key provided
         if self._api_key:
             db_kwargs[adbc_driver_manager.DatabaseOptions.USERNAME.value] = ""
-            db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = (
-                self._api_key
-            )
+            db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = self._api_key
 
         # Create low-level database and connection (avoids dbapi autocommit warning)
         self._db = adbc_driver_flightsql.connect(self._uri, db_kwargs=db_kwargs)
@@ -123,11 +120,7 @@ class _ADBCClient:
 
         for param in params:
             # Check if param is a tuple of (value, arrow_type)
-            if (
-                isinstance(param, tuple)
-                and len(param) == 2
-                and isinstance(param[1], pa.DataType)
-            ):
+            if isinstance(param, tuple) and len(param) == 2 and isinstance(param[1], pa.DataType):
                 value, arrow_type = param
                 param_values.append(value)
                 param_types.append(arrow_type)
@@ -141,9 +134,7 @@ class _ADBCClient:
             param_arrays.append(pa.array([value], type=arrow_type))
 
         # Create parameter schema with positional field names ($1, $2, etc.)
-        param_fields = [
-            pa.field(f"${i + 1}", param_types[i]) for i in range(len(params))
-        ]
+        param_fields = [pa.field(f"${i + 1}", param_types[i]) for i in range(len(params))]
         param_schema = pa.schema(param_fields)
 
         return pa.record_batch(param_arrays, schema=param_schema)
@@ -208,11 +199,7 @@ class _Cert:
         tls_root_cert,
     ):
         if tls_root_cert is not None:
-            tls_root_cert = (
-                tls_root_cert
-                if isinstance(tls_root_cert, Path)
-                else Path(tls_root_cert)
-            )
+            tls_root_cert = tls_root_cert if isinstance(tls_root_cert, Path) else Path(tls_root_cert)
         else:
             tls_root_cert = Path(certifi.where())
 
@@ -249,15 +236,9 @@ class _SpiceFlight:
         connect_kwargs = {"tls_root_certs": tls_root_certs}
         if tls_client_certificate is not None and tls_client_key is not None:
             cert_path = (
-                tls_client_certificate
-                if isinstance(tls_client_certificate, Path)
-                else Path(tls_client_certificate)
+                tls_client_certificate if isinstance(tls_client_certificate, Path) else Path(tls_client_certificate)
             )
-            key_path = (
-                tls_client_key
-                if isinstance(tls_client_key, Path)
-                else Path(tls_client_key)
-            )
+            key_path = tls_client_key if isinstance(tls_client_key, Path) else Path(tls_client_key)
             with open(cert_path, "rb") as f:
                 connect_kwargs["cert_chain"] = f.read()
             with open(key_path, "rb") as f:
@@ -265,9 +246,7 @@ class _SpiceFlight:
         self._flight_client = flight.connect(grpc, **connect_kwargs)
         self._api_key = api_key
         self.headers = [_SpiceFlight._user_agent(user_agent)]
-        self._flight_options = flight.FlightCallOptions(
-            headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-        )
+        self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
         self._authenticate()
 
     def _authenticate(self):
@@ -276,14 +255,10 @@ class _SpiceFlight:
                 self._flight_client.authenticate_basic_token("", self._api_key),
                 _SpiceFlight._user_agent(),
             ]
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-            )
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
         else:
             self.headers = [_SpiceFlight._user_agent()]
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-            )
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS)
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout")
@@ -291,27 +266,19 @@ class _SpiceFlight:
         if timeout is not None:
             if not isinstance(timeout, int) or timeout <= 0:
                 raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=timeout
-            )
+            self._flight_options = flight.FlightCallOptions(headers=self.headers, timeout=timeout)
 
         flight_info = self._flight_client.get_flight_info(
             flight.FlightDescriptor.for_command(query), self._flight_options
         )
 
         try:
-            reader = self._threaded_flight_do_get(
-                ticket=flight_info.endpoints[0].ticket
-            )
+            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
         except flight.FlightUnauthenticatedError:
             self._authenticate()
-            reader = self._threaded_flight_do_get(
-                ticket=flight_info.endpoints[0].ticket
-            )
+            reader = self._threaded_flight_do_get(ticket=flight_info.endpoints[0].ticket)
         except flight.FlightTimedOutError as exc:
-            raise TimeoutError(
-                f"Query timed out and was canceled after {timeout} seconds."
-            ) from exc
+            raise TimeoutError(f"Query timed out and was canceled after {timeout} seconds.") from exc
 
         return reader
 
@@ -457,9 +424,7 @@ class Client:
             ValueError: If params is None
         """
         if params is None:
-            raise ValueError(
-                "params must be a list, not None. Use [] for queries without parameters."
-            )
+            raise ValueError("params must be a list, not None. Use [] for queries without parameters.")
         adbc = self._ensure_adbc_client()
         return adbc.query_with_params(sql, params)
 
@@ -527,12 +492,8 @@ class Client:
         try:
             import polars as pl
         except ImportError as exc:
-            raise ImportError(
-                "polars is not installed. Install it with: pip install spicepy[polars]"
-            ) from exc
-        return cast(
-            "pl.DataFrame", pl.from_arrow(self._read_table(sql, params, timeout))
-        )
+            raise ImportError("polars is not installed. Install it with: pip install spicepy[polars]") from exc
+        return cast("pl.DataFrame", pl.from_arrow(self._read_table(sql, params, timeout)))
 
     def query_pylist(
         self,
@@ -590,19 +551,13 @@ class Client:
 
     def catalogs(self) -> list[str]:
         """List catalog names visible to this connection."""
-        rows = self.query_pylist(
-            "SELECT DISTINCT catalog_name FROM information_schema.schemata "
-            "ORDER BY catalog_name"
-        )
+        rows = self.query_pylist("SELECT DISTINCT catalog_name FROM information_schema.schemata ORDER BY catalog_name")
         return [r["catalog_name"] for r in rows]
 
     def schemas(self, catalog: str | None = None) -> list[str]:
         """List schema names, optionally restricted to a catalog."""
         if catalog is None:
-            rows = self.query_pylist(
-                "SELECT schema_name FROM information_schema.schemata "
-                "ORDER BY schema_name"
-            )
+            rows = self.query_pylist("SELECT schema_name FROM information_schema.schemata ORDER BY schema_name")
         else:
             from ._sql import quote_literal
 
@@ -617,8 +572,7 @@ class Client:
         """List table names, optionally restricted to a schema."""
         if schema is None:
             rows = self.query_pylist(
-                "SELECT table_name FROM information_schema.tables "
-                "ORDER BY table_schema, table_name"
+                "SELECT table_name FROM information_schema.tables ORDER BY table_schema, table_name"
             )
         else:
             from ._sql import quote_literal
@@ -736,17 +690,11 @@ class Client:
 
         return self.from_arrow(pa.Table.from_pydict(data))
 
-    def refresh_dataset(
-        self, dataset: str, refresh_opts: RefreshOpts | None = None
-    ) -> Any:
+    def refresh_dataset(self, dataset: str, refresh_opts: RefreshOpts | None = None) -> Any:
         response = self.http.send_request(
             "POST",
             f"/v1/datasets/{dataset}/acceleration/refresh",
-            body=(
-                json.dumps(refresh_opts.to_dict())
-                if refresh_opts is not None
-                else json.dumps({})
-            ),
+            body=(json.dumps(refresh_opts.to_dict()) if refresh_opts is not None else json.dumps({})),
             headers={"Content-Type": "application/json"},
         )
 
@@ -804,12 +752,23 @@ class Client:
             keywords=keywords,
         )
 
-        response = self.http.send_request(
-            "POST",
-            "/v1/search",
-            body=json.dumps(body),
-            headers={"Content-Type": "application/json"},
-        )
+        try:
+            response = self.http.send_request(
+                "POST",
+                "/v1/search",
+                body=json.dumps(body),
+                headers={"Content-Type": "application/json"},
+            )
+        except HTTPError as err:
+            # requests reports only "400 Client Error" here; the runtime's own message
+            # is in the body and is the part that says what to fix.
+            failed = err.response
+            raise SpiceAIError(
+                search_error_message(
+                    failed.status_code if failed is not None else None,
+                    failed.text if failed is not None else None,
+                )
+            ) from err
 
         return SearchResponse.from_dict(response)
 

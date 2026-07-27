@@ -10,6 +10,7 @@ from spicepy._search import (
     SearchMatch,
     SearchResponse,
     build_search_body,
+    search_error_message,
 )
 from spicepy.error import SpiceAIError
 
@@ -171,3 +172,47 @@ class TestClientSearch:
         client = self._client({"results": [], "duration_ms": 0})
         with pytest.raises(TypeError):
             client.search("tickets", ["app_messages"])  # type: ignore[misc]
+
+    def test_http_error_carries_the_runtime_message(self) -> None:
+        """A bare '400 Client Error' does not say what to fix."""
+        from requests import Response
+        from requests.exceptions import HTTPError
+
+        failed = Response()
+        failed.status_code = 400
+        failed._content = (  # pylint: disable=protected-access
+            b"Search cannot be run on nation because it has no embeddings or full text search indexes."
+        )
+
+        client = self._client({})
+        client.http.send_request.side_effect = HTTPError(response=failed)
+
+        with pytest.raises(SpiceAIError, match="no embeddings or full text search"):
+            client.search("tickets", datasets=["nation"])
+
+
+class TestSearchErrorMessage:
+    """Test the message built for a failed search."""
+
+    def test_plain_text_body(self) -> None:
+        message = search_error_message(400, "No data sources provided")
+        assert "400" in message
+        assert "No data sources provided" in message
+
+    def test_json_error_body_is_unwrapped(self) -> None:
+        message = search_error_message(400, '{"error": "No data sources provided"}')
+        assert "No data sources provided" in message
+        # The JSON envelope itself should not leak into the message.
+        assert '{"error"' not in message
+
+    def test_json_without_an_error_key_is_kept_verbatim(self) -> None:
+        message = search_error_message(500, '{"detail": "boom"}')
+        assert '{"detail": "boom"}' in message
+
+    def test_empty_body(self) -> None:
+        assert "(no response body)" in search_error_message(500, "")
+        assert "(no response body)" in search_error_message(500, None)
+
+    def test_missing_status_code(self) -> None:
+        message = search_error_message(None, "something went wrong")
+        assert "something went wrong" in message

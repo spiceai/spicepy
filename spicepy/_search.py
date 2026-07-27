@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from typing import Any
 
 from .error import SpiceAIError
@@ -76,6 +77,33 @@ class SearchResponse:
 
     def __iter__(self) -> Any:
         return iter(self.results)
+
+
+def search_error_message(status_code: int | None, body: str | None) -> str:
+    """Build the message to raise for a failed search.
+
+    The runtime answers some failures with a JSON ``{"error": ...}`` body and others
+    — ``"Search cannot be run on X because it has no embeddings or full text search
+    indexes"``, for instance — with plain text. Without unpacking both, the caller is
+    left with a bare ``400 Client Error`` and no indication of what to fix.
+    """
+    detail = (body or "").strip()
+
+    if detail:
+        try:
+            parsed = json.loads(detail)
+        except ValueError:
+            pass
+        else:
+            if isinstance(parsed, dict) and parsed.get("error"):
+                detail = str(parsed["error"])
+
+    if not detail:
+        detail = "(no response body)"
+
+    if status_code is None:
+        return f"search failed: {detail}"
+    return f"search failed with status {status_code}: {detail}"
 
 
 # pylint: disable=R0913
