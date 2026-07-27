@@ -128,6 +128,47 @@ Once a `Client` is obtained queries can be made using the `query()` function. Th
 
 A custom timeout can be set by passing the `timeout` parameter in the `query` function call. If no timeout is specified, it will default to a 10 min timeout then cancel the query, and a TimeoutError exception will be raised.
 
+### Search
+
+`search()` runs vector similarity, keyword, and hybrid search against datasets that have an
+embedding column and a loaded embedding model.
+
+```python
+from spicepy import Client
+
+client = Client()
+
+response = client.search("tickets to Tokyo", datasets=["app_messages"], limit=3)
+
+print(f"{len(response)} matches in {response.duration_ms}ms")
+for match in response:
+    print(match.dataset, match.score, match.primary_key, match.matches)
+```
+
+Only `text` is positional; every option is keyword-only:
+
+- **text** (string, required): The query to find similar documents for.
+- **datasets** (list of string, optional): Restrict the search to these datasets. Omit to search every dataset with an embedding column.
+- **limit** (int, optional): Maximum matches to return per dataset.
+- **where** (string, optional): An SQL predicate applied before the search, without the `WHERE` keyword — for example `"city = 'Tokyo'"`.
+- **additional_columns** (list of string, optional): Extra columns to return. A column that is part of the primary key is returned in `match.primary_key` rather than `match.data`.
+- **keywords** (list of string, optional): Pre-filter the embedding column with a lexical search before the vector search runs, making the search hybrid.
+
+```python
+response = client.search(
+    "tickets to Tokyo",
+    datasets=["app_messages"],
+    where="city = 'Tokyo'",
+    additional_columns=["timestamp"],
+    keywords=["plane", "tickets"],
+)
+```
+
+Each `SearchMatch` carries the `dataset` it was found in, its similarity `score`, the matched
+column values in `matches`, the row's `primary_key`, the columns requested via
+`additional_columns` in `data`, and any `metadata`. The runtime omits the last three when
+empty; they default to `{}` so they can be read without a guard.
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.

@@ -24,6 +24,7 @@ from pyarrow._flight import (
 
 from . import config
 from ._http import HttpRequests, RefreshOpts
+from ._search import SearchResponse, build_search_body
 from .params import infer_arrow_type
 
 
@@ -750,6 +751,67 @@ class Client:
         )
 
         return response
+
+    # pylint: disable=R0913
+    # pylint: disable=R0917
+    def search(
+        self,
+        text: str,
+        *,
+        datasets: list[str] | None = None,
+        limit: int | None = None,
+        where: str | None = None,
+        additional_columns: list[str] | None = None,
+        keywords: list[str] | None = None,
+    ) -> SearchResponse:
+        """Run a vector, keyword, or hybrid search.
+
+        Searches datasets that have an embedding column and a loaded embedding
+        model, returning the documents most similar to ``text``.
+
+        Args:
+            text: The query to find similar documents for.
+            datasets: Restrict the search to these datasets. ``None`` searches
+                every dataset with an embedding column.
+            limit: Maximum matches to return per dataset. ``None`` uses the
+                runtime's default.
+            where: An SQL predicate applied before the search, without the
+                ``WHERE`` keyword — for example ``"city = 'Tokyo'"``.
+            additional_columns: Extra dataset columns to return. A column that is
+                part of the primary key is returned in ``SearchMatch.primary_key``
+                rather than ``SearchMatch.data``.
+            keywords: Pre-filter the embedding column with a lexical search before
+                the vector search runs, making the search hybrid.
+
+        Returns:
+            A :class:`SearchResponse`. Iterating it yields each
+            :class:`SearchMatch`.
+
+        Raises:
+            SpiceAIError: if ``text`` is empty.
+
+        Example:
+            >>> response = client.search("tickets to Tokyo", datasets=["app_messages"], limit=3)
+            >>> for match in response:
+            ...     print(match.dataset, match.score, match.matches)
+        """
+        body = build_search_body(
+            text,
+            datasets=datasets,
+            limit=limit,
+            where=where,
+            additional_columns=additional_columns,
+            keywords=keywords,
+        )
+
+        response = self.http.send_request(
+            "POST",
+            "/v1/search",
+            body=json.dumps(body),
+            headers={"Content-Type": "application/json"},
+        )
+
+        return SearchResponse.from_dict(response)
 
 
 class _ArrowFlightCallThread(threading.Thread):
