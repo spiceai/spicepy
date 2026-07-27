@@ -65,7 +65,9 @@ class SearchResponse:
     def from_dict(cls, payload: dict[str, Any]) -> SearchResponse:
         """Build a response from the runtime's wire format."""
         if not isinstance(payload, dict):
-            raise SpiceAIError(f"unexpected search response from the runtime: {payload!r}")
+            raise SpiceAIError(
+                f"unexpected search response from the runtime: {payload!r}"
+            )
 
         return cls(
             results=[SearchMatch.from_dict(m) for m in payload.get("results") or []],

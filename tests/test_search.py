@@ -178,11 +178,13 @@ class TestClientSearch:
         from requests import Response
         from requests.exceptions import HTTPError
 
+        body = (
+            b"Search cannot be run on nation because it has no embeddings"
+            b" or full text search indexes."
+        )
         failed = Response()
         failed.status_code = 400
-        failed._content = (  # pylint: disable=protected-access
-            b"Search cannot be run on nation because it has no embeddings or full text search indexes."
-        )
+        failed._content = body  # pylint: disable=protected-access
 
         client = self._client({})
         client.http.send_request.side_effect = HTTPError(response=failed)
