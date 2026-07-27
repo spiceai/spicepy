@@ -239,7 +239,7 @@ class _SpiceFlight:
             )
         return (str.encode("user-agent"), str.encode(config.SPICE_USER_AGENT))
 
-    def __init__(
+    def __init__(  # noqa: PLR0917
         self,
         grpc: str,
         api_key: str,
@@ -332,7 +332,7 @@ class _SpiceFlight:
 
 class Client:
     # pylint: disable=R0917
-    def __init__(
+    def __init__(  # noqa: PLR0917
         self,
         api_key: str | None = None,
         flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,

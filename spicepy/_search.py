@@ -109,9 +109,9 @@ def search_error_message(status_code: int | None, body: str | None) -> str:
 
 
 # pylint: disable=R0913
-# pylint: disable=R0917
 def build_search_body(
     text: str,
+    *,
     datasets: list[str] | None = None,
     limit: int | None = None,
     where: str | None = None,
