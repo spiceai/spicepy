@@ -89,17 +89,15 @@ class HttpRequests:
         decodes JSON. Needed for endpoints whose status code carries the meaning
         (``/v1/ready`` answers ``503`` for "not ready") or whose body is not JSON.
         """
-        if headers is None:
-            headers = {}
-
-        headers.update(self.session.headers)
+        merged_headers = dict(headers) if headers is not None else {}
+        merged_headers.update(self.session.headers)
 
         return self._operation(method)(  # type: ignore[call-arg]
             url=f"{self.base_url}{path}",
             data=body,
             params=self.prepare_param(param.copy()) if param is not None else None,
             verify=True,
-            headers=headers,
+            headers=merged_headers,
         )
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:

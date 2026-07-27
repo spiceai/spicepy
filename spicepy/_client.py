@@ -752,6 +752,13 @@ class Client:
                 f"components, got {type(response).__name__}."
             )
 
+        for index, item in enumerate(response):
+            if not isinstance(item, dict):
+                raise SpiceAIError(
+                    f"Unexpected response from /v1/status: expected component "
+                    f"{index} to be an object, got {type(item).__name__}."
+                )
+
         return [ConnectionDetails.from_dict(item) for item in response]
 
     def is_ready(self) -> bool:

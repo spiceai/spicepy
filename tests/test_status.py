@@ -135,6 +135,18 @@ class TestRuntimeStatus:
         with pytest.raises(SpiceAIError, match="expected a list of components"):
             _client_with_http(http).runtime_status()
 
+    @pytest.mark.parametrize("entry", ["flight", 3, None, ["flight"]])
+    def test_non_object_entry_raises(self, entry: object) -> None:
+        """A list entry that is not an object is a clear error, not AttributeError."""
+        http = MagicMock()
+        http.send_request.return_value = [
+            {"name": "http", "endpoint": "127.0.0.1:8090", "status": "Ready"},
+            entry,
+        ]
+
+        with pytest.raises(SpiceAIError, match="expected component 1 to be an object"):
+            _client_with_http(http).runtime_status()
+
 
 class TestIsReady:
     """Test Client.is_ready."""
