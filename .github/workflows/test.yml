@@ -135,15 +135,34 @@ jobs:
         run: |
           spice init spice_qs
           cd spice_qs
-          spice add spiceai/quickstart
+          # Define the dataset inline instead of `spice add spiceai/quickstart`.
+          # Pulling it from the Spicepod registry made every PR's integration tests
+          # depend on a remote service, and when that service started returning a
+          # JSON error body under `Content-Type: application/zip`, every open PR
+          # failed at once on "Failed to extract Spicepod archive: Could not find
+          # EOCD". This is the same dataset spiceai/quickstart defines.
+          cat >> spicepod.yaml <<'YAML'
+
+          datasets:
+            - from: s3://spiceai-demo-datasets/taxi_trips/2024/
+              name: taxi_trips
+              description: taxi trips in s3
+              params:
+                file_format: parquet
+              acceleration:
+                enabled: true
+          YAML
           spiced &> spice.log &
-          # Wait for runtime to be ready (poll /v1/ready endpoint)
-          for i in {1..60}; do
-            if curl -s http://localhost:8090/v1/ready > /dev/null 2>&1; then
-              echo "Spice runtime is ready"
+          # Wait until the dataset is queryable, not merely until the runtime is up:
+          # /v1/ready returns before an accelerated dataset finishes loading, which
+          # races the tests into "table 'taxi_trips' not found".
+          for i in {1..120}; do
+            if curl -s -X POST http://localhost:8090/v1/sql \
+                 -d 'SELECT count(*) AS n FROM taxi_trips' 2>/dev/null | grep -q '"n"'; then
+              echo "Spice runtime is ready and taxi_trips is queryable"
               break
             fi
-            echo "Waiting for Spice runtime to be ready... ($i/60)"
+            echo "Waiting for Spice runtime and taxi_trips... ($i/120)"
             sleep 1
           done
 
@@ -154,20 +173,32 @@ jobs:
           export PATH="$HOME/.spice/bin:$PATH"
           spice init spice_qs
           cd spice_qs
-          spice add spiceai/quickstart
+          # Inline dataset rather than a registry fetch — see the non-Windows step.
+          cat >> spicepod.yaml <<'YAML'
+
+          datasets:
+            - from: s3://spiceai-demo-datasets/taxi_trips/2024/
+              name: taxi_trips
+              description: taxi trips in s3
+              params:
+                file_format: parquet
+              acceleration:
+                enabled: true
+          YAML
           nohup spiced > spice.log 2>&1 &
-          # Wait for runtime to be ready (poll /v1/ready endpoint)
-          for i in $(seq 1 120); do
-            if curl -s http://localhost:8090/v1/ready > /dev/null 2>&1; then
-              echo "Spice runtime is ready"
+          # Wait until the dataset is queryable — see the non-Windows step.
+          for i in $(seq 1 180); do
+            if curl -s -X POST http://localhost:8090/v1/sql \
+                 -d 'SELECT count(*) AS n FROM taxi_trips' 2>/dev/null | grep -q '"n"'; then
+              echo "Spice runtime is ready and taxi_trips is queryable"
               exit 0
             fi
-            echo "Waiting for Spice runtime to be ready... ($i/120)"
+            echo "Waiting for Spice runtime and taxi_trips... ($i/180)"
             sleep 1
           done
           echo "=== spice log ==="
           cat spice.log || true
-          echo "Spice runtime did not become ready within 120 seconds"
+          echo "taxi_trips did not become queryable within 180 seconds"
           exit 1
 
       # The Windows readiness poll above runs inside WSL and only checks the
