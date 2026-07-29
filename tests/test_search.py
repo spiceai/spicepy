@@ -218,3 +218,34 @@ class TestSearchErrorMessage:
     def test_missing_status_code(self) -> None:
         message = search_error_message(None, "something went wrong")
         assert "something went wrong" in message
+
+
+class TestDecodeRobustness:
+    """Malformed responses should fail loudly, not later."""
+
+    def test_non_dict_match_raises(self) -> None:
+        with pytest.raises(SpiceAIError, match="unexpected search match"):
+            SearchMatch.from_dict("not a match")
+
+    def test_non_list_results_raises(self) -> None:
+        with pytest.raises(SpiceAIError, match="unexpected search results"):
+            SearchResponse.from_dict({"results": "not a list"})
+
+    def test_non_mapping_fields_coerce_to_empty(self) -> None:
+        """A malformed field must not leave a str where a dict is documented."""
+        response = SearchResponse.from_dict(
+            {
+                "results": [{"dataset": "a", "_score": 0.5, "data": "garbage"}],
+                "duration_ms": 1,
+            }
+        )
+        assert response.results[0].data == {}
+
+    def test_non_integer_duration_falls_back_to_zero(self) -> None:
+        response = SearchResponse.from_dict({"results": [], "duration_ms": "soon"})
+        assert response.duration_ms == 0
+
+    def test_error_page_instead_of_results(self) -> None:
+        """A proxy or error page reaches this decoder as readily as a result."""
+        with pytest.raises(SpiceAIError, match="unexpected search response"):
+            SearchResponse.from_dict("<html>502 Bad Gateway</html>")

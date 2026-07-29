@@ -9,6 +9,16 @@ from typing import Any
 from .error import SpiceAIError
 
 
+def _as_mapping(value: Any) -> dict[str, Any]:
+    """Return ``value`` if it is a mapping, otherwise an empty dict.
+
+    The runtime omits these objects when empty, and a malformed or proxied
+    response can put something else there entirely. Coercing keeps the declared
+    types honest instead of handing callers a str where a dict is documented.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 @dataclass
 class SearchMatch:
     """A single document matched by a search.
@@ -36,18 +46,24 @@ class SearchMatch:
     """Any additional metadata the runtime attached to the match."""
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> SearchMatch:
+    def from_dict(cls, payload: Any) -> SearchMatch:
         """Build a match from the runtime's wire format.
 
         The wire format names the similarity score ``_score``.
+
+        Raises:
+            SpiceAIError: if the match is not an object.
         """
+        if not isinstance(payload, dict):
+            raise SpiceAIError(f"unexpected search match from the runtime: {payload!r}")
+
         return cls(
             dataset=payload.get("dataset", ""),
             score=payload.get("_score", 0.0),
-            matches=payload.get("matches") or {},
-            primary_key=payload.get("primary_key") or {},
-            data=payload.get("data") or {},
-            metadata=payload.get("metadata") or {},
+            matches=_as_mapping(payload.get("matches")),
+            primary_key=_as_mapping(payload.get("primary_key")),
+            data=_as_mapping(payload.get("data")),
+            metadata=_as_mapping(payload.get("metadata")),
         )
 
 
@@ -62,16 +78,33 @@ class SearchResponse:
     """How long the runtime took to run the search."""
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> SearchResponse:
-        """Build a response from the runtime's wire format."""
+    def from_dict(cls, payload: Any) -> SearchResponse:
+        """Build a response from the runtime's wire format.
+
+        Raises:
+            SpiceAIError: if the response, or its ``results``, is not the
+                expected shape. An error page or a proxy response reaches here
+                as easily as a real result, so it fails loudly rather than
+                surfacing an AttributeError somewhere later.
+        """
         if not isinstance(payload, dict):
             raise SpiceAIError(
                 f"unexpected search response from the runtime: {payload!r}"
             )
 
+        results = payload.get("results") or []
+        if not isinstance(results, list):
+            raise SpiceAIError(
+                f"unexpected search results from the runtime: {results!r}"
+            )
+
+        duration = payload.get("duration_ms", 0)
+        if not isinstance(duration, int) or isinstance(duration, bool):
+            duration = 0
+
         return cls(
-            results=[SearchMatch.from_dict(m) for m in payload.get("results") or []],
-            duration_ms=payload.get("duration_ms", 0),
+            results=[SearchMatch.from_dict(m) for m in results],
+            duration_ms=duration,
         )
 
     def __len__(self) -> int:
