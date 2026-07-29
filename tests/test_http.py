@@ -439,7 +439,9 @@ class TestHttpRequestsSendRequestRaw:
         assert sent_headers["X-API-Key"] == "secret"
 
     @patch("spicepy._http.Session")
-    def test_does_not_mutate_caller_headers(self, mock_session_class: MagicMock) -> None:
+    def test_does_not_mutate_caller_headers(
+        self, mock_session_class: MagicMock
+    ) -> None:
         """The caller's headers dict is left untouched; session headers still win."""
         mock_session = MagicMock()
         mock_session.get.return_value = MagicMock(spec=Response)
