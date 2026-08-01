@@ -165,9 +165,7 @@ class TestClientSearch:
         """The response body is parsed into a SearchResult."""
         client = self._client(
             {
-                "results": [
-                    {"matches": {"m": ["hit"]}, "dataset": "d", "_score": 0.7}
-                ],
+                "results": [{"matches": {"m": ["hit"]}, "dataset": "d", "_score": 0.7}],
                 "duration_ms": 12,
             }
         )

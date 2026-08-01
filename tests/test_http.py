@@ -415,9 +415,7 @@ class TestHttpRequestsPostJson:
         assert kwargs["headers"]["Content-Type"] == "application/json"
 
     @patch("spicepy._http.Session")
-    def test_error_carries_runtime_message(
-        self, mock_session_class: MagicMock
-    ) -> None:
+    def test_error_carries_runtime_message(self, mock_session_class: MagicMock) -> None:
         """A plain-text error body is surfaced rather than discarded."""
         mock_response = MagicMock(spec=Response)
         mock_response.ok = False
