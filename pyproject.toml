@@ -163,6 +163,8 @@ ignore = [
     "ANN205", # Missing return type annotation for staticmethod
     "ANN206", # Missing return type annotation for classmethod
     "PLR0913", # Too many arguments in function definition
+    "PLR0917", # Too many positional arguments: Client.__init__ is public API, so its
+               # parameters cannot become keyword-only without a breaking change
     "PLR0911", # Too many return statements
     "PLR0915", # Too many statements
     "S101",   # Use of assert detected (needed for tests)
