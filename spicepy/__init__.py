@@ -10,11 +10,14 @@ from ._client import Client
 from ._dataframe import SpiceDataFrame
 from ._expr import Expr, WindowFrame, case, col, lit
 from ._http import RefreshOpts
+from ._search import SearchMatch, SearchResult
 
 __all__ = [
     "Client",
     "Expr",
     "RefreshOpts",
+    "SearchMatch",
+    "SearchResult",
     "SpiceDataFrame",
     "WindowFrame",
     "case",

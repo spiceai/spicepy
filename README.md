@@ -128,6 +128,44 @@ Once a `Client` is obtained queries can be made using the `query()` function. Th
 
 A custom timeout can be set by passing the `timeout` parameter in the `query` function call. If no timeout is specified, it will default to a 10 min timeout then cancel the query, and a TimeoutError exception will be raised.
 
+### Search
+
+Search datasets for documents similar to a piece of text. This requires datasets with an embedding column and a loaded embedding model — see [Search & Retrieval](https://docs.spice.ai/features/search-and-retrieval) for how to configure them.
+
+```python
+from spicepy import Client
+
+client = Client()
+
+result = client.search(
+    'tokyo plane tickets',
+    datasets=['app_messages'],
+    limit=3,
+    additional_columns=['timestamp'],
+)
+
+print(f'{len(result)} matches in {result.duration_ms}ms')
+for match in result:
+    print(match.score, match.dataset, match.matches, match.data)
+```
+
+`search()` takes the search text plus the following keyword arguments:
+
+- **datasets** (list of string, optional): Datasets to search. Omit to search every searchable dataset.
+- **limit** (int, optional): Maximum matches to return per dataset.
+- **where** (string, optional): A SQL predicate filtering candidate rows, without the leading `WHERE` — for example `'user_id = 42'`.
+- **additional_columns** (list of string, optional): Extra columns to return with each match. Primary key columns are returned under `primary_key`, the rest under `data`.
+- **keywords** (list of string, optional): Keywords for the lexical pass of a hybrid search, which the runtime combines with the vector scores into a single ranking.
+
+It returns a `SearchResult` holding `duration_ms` and a list of `SearchMatch`. Iterating the result yields the matches directly. Each `SearchMatch` has:
+
+- **dataset** (string): The dataset the match was found in.
+- **score** (float): The match's similarity to the query. Higher is more similar.
+- **matches** (dict): The matched values, keyed by source column. Each value is a list, because one column may contribute several chunks to a single match.
+- **primary_key** (dict): The primary key columns identifying the matched row. Empty when the dataset declares no primary key.
+- **data** (dict): Any `additional_columns` that were requested.
+- **metadata** (dict): Extra per-match metadata the runtime attached.
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.

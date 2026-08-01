@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 import datetime
+import json
 from pathlib import Path
 from typing import Any, Literal
 
@@ -72,6 +73,37 @@ class HttpRequests:
         )
         response.raise_for_status()
         return response.json()
+
+    def post_json(self, path: str, payload: dict[str, Any]) -> Any:
+        """POST a JSON payload and decode the JSON response.
+
+        Unlike `send_request`, a failed request raises `SpiceAIError` carrying
+        the runtime's own explanation. The runtime reports errors on these
+        endpoints as a plain-text body, which `raise_for_status` discards.
+        """
+        headers = dict(self.session.headers)
+        headers["Content-Type"] = "application/json"
+
+        response: Response = self.session.post(
+            url=f"{self.base_url}{path}",
+            data=json.dumps(payload),
+            verify=True,
+            headers=headers,
+        )
+
+        if not response.ok:
+            detail = (response.text or "").strip()
+            raise SpiceAIError(
+                f"{path} failed with status {response.status_code}"
+                + (f": {detail}" if detail else "")
+            )
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise SpiceAIError(
+                f"{path} returned a response that was not valid JSON"
+            ) from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():
