@@ -200,6 +200,7 @@ ignore = [
 ]
 "spicepy/_client.py" = [
     "S608",   # SQL is constructed from escaped identifiers/literals; lint can't tell
+    "PLR0917", # Client constructors take many positional args; already waived for pylint (R0917)
 ]
 "spicepy/_dataframe.py" = [
     "S608",   # The DataFrame layer's entire job is composing SQL; identifiers and literals are escaped
