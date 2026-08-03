@@ -386,6 +386,81 @@ class TestHttpRequestsSendRequest:
         )
 
 
+class TestHttpRequestsSendRequestRaw:
+    """Test HttpRequests.send_request_raw method."""
+
+    @patch("spicepy._http.Session")
+    def test_returns_response_without_decoding(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """The raw Response is returned, not a decoded body."""
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+        result = http.send_request_raw("GET", "/v1/ready")
+
+        assert result is mock_response
+        mock_response.json.assert_not_called()
+
+    @patch("spicepy._http.Session")
+    def test_does_not_raise_on_error_status(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """A non-2xx status is left to the caller to interpret."""
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_response.status_code = 503
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+        result = http.send_request_raw("GET", "/v1/ready")
+
+        assert result.status_code == 503
+        mock_response.raise_for_status.assert_not_called()
+
+    @patch("spicepy._http.Session")
+    def test_merges_session_headers(self, mock_session_class: MagicMock) -> None:
+        """Session headers are applied, as with send_request."""
+        mock_session = MagicMock()
+        mock_session.headers = {"X-API-Key": "secret"}
+        mock_session.get.return_value = MagicMock(spec=Response)
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {"X-API-Key": "secret"})
+        http.send_request_raw("GET", "/v1/ready")
+
+        sent_headers = mock_session.get.call_args.kwargs["headers"]
+        assert sent_headers["X-API-Key"] == "secret"
+
+    @patch("spicepy._http.Session")
+    def test_does_not_mutate_caller_headers(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """The caller's headers dict is left untouched; session headers still win."""
+        mock_session = MagicMock()
+        mock_session.get.return_value = MagicMock(spec=Response)
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {"X-API-Key": "session"})
+        caller_headers = {"X-API-Key": "caller", "Content-Type": "application/json"}
+        http.send_request_raw("GET", "/v1/ready", headers=caller_headers)
+
+        assert caller_headers == {
+            "X-API-Key": "caller",
+            "Content-Type": "application/json",
+        }
+        sent_headers = mock_session.get.call_args.kwargs["headers"]
+        assert sent_headers["X-API-Key"] == "session"
+        assert sent_headers["Content-Type"] == "application/json"
+        assert sent_headers["user-agent"] == SPICE_USER_AGENT
+
+
 class TestHttpRequestsRetryConfiguration:
     """Test HttpRequests retry configuration."""
 

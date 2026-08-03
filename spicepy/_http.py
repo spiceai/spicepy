@@ -73,6 +73,33 @@ class HttpRequests:
         response.raise_for_status()
         return response.json()
 
+    # pylint: disable=R0913
+    # pylint: disable=R0917
+    def send_request_raw(
+        self,
+        method: HttpMethod,
+        path: str,
+        param: dict[str, Any] | None = None,
+        headers: dict[str, Any] | None = None,
+        body: str | None = None,
+    ) -> Response:
+        """Send a request and return the raw ``Response``.
+
+        Unlike :meth:`send_request`, this neither raises on a non-2xx status nor
+        decodes JSON. Needed for endpoints whose status code carries the meaning
+        (``/v1/ready`` answers ``503`` for "not ready") or whose body is not JSON.
+        """
+        merged_headers = dict(headers) if headers is not None else {}
+        merged_headers.update(self.session.headers)
+
+        return self._operation(method)(  # type: ignore[call-arg]
+            url=f"{self.base_url}{path}",
+            data=body,
+            params=self.prepare_param(param.copy()) if param is not None else None,
+            verify=True,
+            headers=merged_headers,
+        )
+
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():
             if isinstance(val, datetime.timedelta):

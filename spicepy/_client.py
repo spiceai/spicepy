@@ -24,6 +24,8 @@ from pyarrow._flight import (
 
 from . import config
 from ._http import HttpRequests, RefreshOpts
+from ._status import ConnectionDetails
+from .error import SpiceAIError
 from .params import infer_arrow_type
 
 
@@ -734,6 +736,48 @@ class Client:
         import pyarrow as pa
 
         return self.from_arrow(pa.Table.from_pydict(data))
+
+    def runtime_status(self) -> list[ConnectionDetails]:
+        """Return the status of each runtime connection.
+
+        Backed by ``GET /v1/status``. Where :meth:`is_ready` reports a single boolean
+        for the whole runtime, this reports ``http``, ``flight``, ``metrics`` and
+        ``opentelemetry`` individually, so it can say *which* component is not ready.
+        """
+        response = self.http.send_request("GET", "/v1/status")
+
+        if not isinstance(response, list):
+            raise SpiceAIError(
+                f"Unexpected response from /v1/status: expected a list of "
+                f"components, got {type(response).__name__}."
+            )
+
+        for index, item in enumerate(response):
+            if not isinstance(item, dict):
+                raise SpiceAIError(
+                    f"Unexpected response from /v1/status: expected component "
+                    f"{index} to be an object, got {type(item).__name__}."
+                )
+
+        return [ConnectionDetails.from_dict(item) for item in response]
+
+    def is_ready(self) -> bool:
+        """Return whether the runtime is ready to serve queries.
+
+        Backed by ``GET /v1/ready``, which answers ``200`` when ready and ``503``
+        when not. Any other status raises :class:`SpiceAIError`, so "not ready" and
+        "could not ask" stay distinguishable.
+        """
+        response = self.http.send_request_raw("GET", "/v1/ready")
+
+        if response.status_code == 200:
+            return True
+        if response.status_code == 503:
+            return False
+
+        raise SpiceAIError(
+            f"Unexpected response from /v1/ready: HTTP {response.status_code}."
+        )
 
     def refresh_dataset(
         self, dataset: str, refresh_opts: RefreshOpts | None = None
