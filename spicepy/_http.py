@@ -131,6 +131,7 @@ class HttpRequests:
             verify=True,
             headers=merged_headers,
         )
+
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():
             if isinstance(val, datetime.timedelta):

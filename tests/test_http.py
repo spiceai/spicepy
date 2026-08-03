@@ -452,6 +452,7 @@ class TestHttpRequestsPostJson:
         with pytest.raises(SpiceAIError, match="not valid JSON"):
             http.post_json("/v1/search", {"text": "tokyo"})
 
+
 class TestHttpRequestsSendRequestRaw:
     """Test HttpRequests.send_request_raw method."""
 
