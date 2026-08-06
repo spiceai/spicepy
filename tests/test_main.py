@@ -45,17 +45,32 @@ def wait_for_ready(
     return False
 
 
-# Skip cloud tests if TEST_SPICE_CLOUD is not set to true
+def cloud_api_key():
+    """The Spice.ai Cloud API key, or an empty string when none is available.
+
+    An empty value counts as absent, so an unusable key falls through to the next
+    source rather than being taken as the answer. `test.yml` passes the key as
+    `SPICE_API_KEY: ${{ secrets.SCP_SPICEAI_TPCH_API_KEY }}`, and a workflow run
+    that cannot read repository secrets - every pull request from a fork - renders
+    that expression as the empty string rather than leaving the variable unset.
+    """
+    return os.environ.get("SPICE_API_KEY") or os.environ.get("API_KEY") or ""
+
+
+# Skip cloud tests unless they are enabled and a credential is available to run them
 def skip_cloud():
-    skip = os.environ.get("TEST_SPICE_CLOUD") != "true"
+    enabled = os.environ.get("TEST_SPICE_CLOUD") == "true"
     return pytest.mark.skipif(
-        skip, reason="Cloud tests disabled (set TEST_SPICE_CLOUD=true)"
+        not (enabled and cloud_api_key()),
+        reason=(
+            "Cloud tests need TEST_SPICE_CLOUD=true and a non-empty "
+            "SPICE_API_KEY (or API_KEY)"
+        ),
     )
 
 
 def get_cloud_client():
-    api_key = os.environ.get("SPICE_API_KEY", os.environ.get("API_KEY", ""))
-    return Client(api_key=api_key, flight_url="grpc+tls://flight.spiceai.io")
+    return Client(api_key=cloud_api_key(), flight_url="grpc+tls://flight.spiceai.io")
 
 
 def get_local_client():
