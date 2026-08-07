@@ -60,13 +60,24 @@ def cloud_api_key():
 # Skip cloud tests unless they are enabled and a credential is available to run them
 def skip_cloud():
     enabled = os.environ.get("TEST_SPICE_CLOUD") == "true"
-    return pytest.mark.skipif(
-        not (enabled and cloud_api_key()),
-        reason=(
+    has_key = bool(cloud_api_key())
+
+    # Name the requirement that is actually missing, so a skipped run says which
+    # of the two to fix instead of restating both every time.
+    if enabled and not has_key:
+        reason = (
+            "Cloud tests are enabled but no credential is available: set a "
+            "non-empty SPICE_API_KEY (or API_KEY)"
+        )
+    elif has_key and not enabled:
+        reason = "Cloud tests are disabled: set TEST_SPICE_CLOUD=true to run them"
+    else:
+        reason = (
             "Cloud tests need TEST_SPICE_CLOUD=true and a non-empty "
-            "SPICE_API_KEY (or API_KEY)"
-        ),
-    )
+            "SPICE_API_KEY (or API_KEY); neither is set"
+        )
+
+    return pytest.mark.skipif(not (enabled and has_key), reason=reason)
 
 
 def get_cloud_client():
