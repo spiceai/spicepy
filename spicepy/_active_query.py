@@ -15,7 +15,8 @@ class ActiveQuery:
     """Server-assigned id, and what :meth:`Client.cancel_active_query` takes."""
 
     protocol: str
-    """The protocol the query arrived on, such as ``flight`` or ``http``."""
+    """The protocol the query arrived on: ``http``, ``flight``, ``flightsql`` or
+    ``internal``."""
 
     sql_preview: str
     """The query's SQL, truncated by the runtime for display."""

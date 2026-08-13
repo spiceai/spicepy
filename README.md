@@ -163,13 +163,31 @@ a future runtime is preserved as a plain string rather than raising.
 
 ### Listing and Cancelling Running Queries
 
-`list_active_queries()` reports the synchronous queries this client currently has
-running — those started by `query()`, `query_with_params()`, FlightSQL, NSQL and search —
-and `cancel_active_query()` stops one by id.
+`list_active_queries()` reports the synchronous queries running in the caller's scope —
+those started by `query()`, `query_with_params()`, FlightSQL, NSQL and search — and
+`cancel_active_query()` stops one by id.
 
 The runtime does not hand a query's id back to the client that submitted it, so the two
-are used together: list to find the query, then cancel it. Both are scoped to the caller,
-so a client only ever sees and cancels its own queries.
+are used together: list to find the query, then cancel it.
+
+Two boundaries apply, and a query is reachable only inside both.
+
+**One runtime instance.** The runtime holds active synchronous queries in memory, per
+process, and these endpoints report only what the instance answering them knows. Behind
+a load balancer, `http_url` may resolve to an instance that never received the query —
+it will not be listed, and its id reports as not found.
+
+**One authenticated principal**, not a `Client` instance. The principal is whatever
+credential the runtime authenticates — an API key or a client certificate — so every
+client presenting the same credential lists and cancels the same queries. Only requests
+for which the runtime establishes no principal at all share the `public` scope. A query
+outside the caller's scope is reported as if it did not exist.
+
+> **Runtime version.** Principal scoping on these two endpoints landed in
+> [spiceai/spiceai#12841](https://github.com/spiceai/spiceai/pull/12841) and is in no
+> runtime release up to and including `v2.1.5`. Against an earlier runtime both calls
+> operate on every active query the instance holds, for any caller with write access.
+> Check your runtime version before relying on the scope described above.
 
 ```python
 from spicepy import Client
@@ -187,7 +205,7 @@ if queries:
 ```
 
 `cancel_active_query()` returns `None` on success and raises `SpiceAIError` otherwise —
-including when the id belongs to a different client, which the runtime reports as not
+including when the id falls outside the caller's scope, which the runtime reports as not
 found rather than cancelling.
 
 ## Documentation

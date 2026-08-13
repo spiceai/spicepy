@@ -187,12 +187,19 @@ class TestCancelActiveQuery:
         http.send_request_raw.assert_not_called()
 
     def test_invalid_uuid_points_at_list_active_queries(self) -> None:
-        """400 tells the caller where a valid id comes from."""
+        """A rejected id tells the caller where a valid one comes from."""
+        http = MagicMock()
+
+        with pytest.raises(SpiceAIError, match="list_active_queries"):
+            _client_with_http(http).cancel_active_query("not-a-uuid")
+
+    def test_a_rejected_uuid_from_the_runtime_is_reported(self) -> None:
+        """400 on a well-formed id is still the runtime's answer to report."""
         http = MagicMock()
         http.send_request_raw.return_value = MagicMock(status_code=400)
 
         with pytest.raises(SpiceAIError, match="not a valid UUID"):
-            _client_with_http(http).cancel_active_query("not-a-uuid")
+            _client_with_http(http).cancel_active_query(self.query_id)
 
     def test_forbidden_names_the_credential_problem(self) -> None:
         """403 says what to fix rather than reporting a bare status code."""
@@ -202,8 +209,29 @@ class TestCancelActiveQuery:
         with pytest.raises(SpiceAIError, match="write access"):
             _client_with_http(http).cancel_active_query(self.query_id)
 
+    @pytest.mark.parametrize(
+        "query_id",
+        [".", "..", "../queries/escape", "not-a-uuid", "0198f0a1-9c3d-7c4e-8a11"],
+    )
+    def test_an_id_that_could_reroute_the_request_is_rejected_locally(
+        self, query_id: str
+    ) -> None:
+        """A non-UUID id never becomes a request path.
+
+        "." and ".." survive quoting — they are unreserved — and requests then
+        resolves them away, so ".." would turn the cancel POST into one at
+        /v1/cancel.
+        """
+        http = MagicMock()
+        http.send_request_raw.return_value = MagicMock(status_code=200)
+
+        with pytest.raises(SpiceAIError, match="not a valid UUID"):
+            _client_with_http(http).cancel_active_query(query_id)
+
+        http.send_request_raw.assert_not_called()
+
     def test_not_found_explains_both_causes(self) -> None:
-        """404 covers both a finished query and one owned by another client."""
+        """404 covers both a finished query and one outside the caller's scope."""
         http = MagicMock()
         http.send_request_raw.return_value = MagicMock(status_code=404)
 
