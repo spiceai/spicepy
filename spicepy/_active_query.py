@@ -26,7 +26,9 @@ class ActiveQuery:
     @property
     def started_at(self) -> datetime.datetime:
         """When the query started, as a timezone-aware UTC datetime."""
-        return datetime.datetime.fromtimestamp(self.started_at_ms / 1000, tz=datetime.UTC)
+        return datetime.datetime.fromtimestamp(
+            self.started_at_ms / 1000, tz=datetime.UTC
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ActiveQuery:
