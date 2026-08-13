@@ -161,6 +161,35 @@ Each `ConnectionDetails` carries the component `name` (`http`, `flight`, `metric
 `NotLoaded`. `component.is_ready` is shorthand for a `Ready` status. A status added by
 a future runtime is preserved as a plain string rather than raising.
 
+### Listing and Cancelling Running Queries
+
+`list_active_queries()` reports the synchronous queries this client currently has
+running — those started by `query()`, `query_with_params()`, FlightSQL, NSQL and search —
+and `cancel_active_query()` stops one by id.
+
+The runtime does not hand a query's id back to the client that submitted it, so the two
+are used together: list to find the query, then cancel it. Both are scoped to the caller,
+so a client only ever sees and cancels its own queries.
+
+```python
+from spicepy import Client
+
+client = Client(http_url="http://127.0.0.1:8090")
+
+for query in client.list_active_queries():
+    print(f"{query.query_id} [{query.protocol}] {query.sql_preview}")
+    print(f"  started at {query.started_at.isoformat()}")
+
+# Cancel a long-running query by id.
+queries = client.list_active_queries()
+if queries:
+    client.cancel_active_query(queries[0].query_id)
+```
+
+`cancel_active_query()` returns `None` on success and raises `SpiceAIError` otherwise —
+including when the id belongs to a different client, which the runtime reports as not
+found rather than cancelling.
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.
