@@ -27,6 +27,7 @@ from pyarrow._flight import (
 from . import config
 from ._active_query import ActiveQuery
 from ._http import HttpRequests, RefreshOpts
+from ._search import SEARCH_PATH, SearchResult, build_search_body
 from ._status import ConnectionDetails
 from .error import SpiceAIError
 from .params import infer_arrow_type
@@ -912,6 +913,68 @@ class Client:
         )
 
         return response
+
+    # ------------------------------------------------------------------
+    # Search
+    # ------------------------------------------------------------------
+
+    # pylint: disable=R0913
+    # pylint: disable=R0917
+    def search(
+        self,
+        text: str,
+        *,
+        datasets: list[str] | None = None,
+        limit: int | None = None,
+        where: str | None = None,
+        additional_columns: list[str] | None = None,
+        keywords: list[str] | None = None,
+    ) -> SearchResult:
+        """Search datasets for documents similar to ``text``.
+
+        Runs against datasets that have an embedding column and a loaded
+        embedding model. Supplying ``keywords`` adds a lexical pass, which the
+        runtime combines with the vector scores into a hybrid ranking.
+
+        Example:
+            result = client.search(
+                "tokyo plane tickets",
+                datasets=["app_messages"],
+                limit=3,
+                additional_columns=["timestamp"],
+            )
+            for match in result:
+                print(match.dataset, match.score, match.matches)
+
+        Args:
+            text: The text to find similar documents for.
+            datasets: Datasets to search. Omit to search every searchable dataset.
+            limit: Maximum matches to return per dataset.
+            where: A SQL predicate to filter candidate rows, without the
+                leading ``WHERE`` — for example ``"user_id = 42"``.
+            additional_columns: Extra columns to return alongside each match.
+                A primary key column is returned under ``primary_key``, the
+                rest under ``data``.
+            keywords: Keywords for the lexical pass of a hybrid search.
+
+        Returns:
+            A :class:`~spicepy.SearchResult` holding the matches and the
+            runtime's reported duration.
+
+        Raises:
+            ValueError: If ``text`` is empty, ``datasets`` is an empty list, or
+                ``limit`` is less than 1.
+            SpiceAIError: If the runtime rejects the search or is unreachable.
+        """
+        body = build_search_body(
+            text,
+            datasets=datasets,
+            limit=limit,
+            where=where,
+            additional_columns=additional_columns,
+            keywords=keywords,
+        )
+        return SearchResult.from_json(self.http.post_json(SEARCH_PATH, body))
 
 
 class _ArrowFlightCallThread(threading.Thread):

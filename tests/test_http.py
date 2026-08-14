@@ -386,6 +386,73 @@ class TestHttpRequestsSendRequest:
         )
 
 
+class TestHttpRequestsPostJson:
+    """Test HttpRequests.post_json method."""
+
+    @staticmethod
+    def _session(mock_session_class: MagicMock, response: MagicMock) -> MagicMock:
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_session.post.return_value = response
+        mock_session_class.return_value = mock_session
+        return mock_session
+
+    @patch("spicepy._http.Session")
+    def test_posts_json_body(self, mock_session_class: MagicMock) -> None:
+        """The payload is serialized as JSON with a JSON content type."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = True
+        mock_response.json.return_value = {"results": []}
+        mock_session = self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        result = http.post_json("/v1/search", {"text": "tokyo"})
+
+        assert result == {"results": []}
+        kwargs = mock_session.post.call_args.kwargs
+        assert kwargs["url"] == "http://example.com/v1/search"
+        assert kwargs["data"] == '{"text": "tokyo"}'
+        assert kwargs["headers"]["Content-Type"] == "application/json"
+
+    @patch("spicepy._http.Session")
+    def test_error_carries_runtime_message(self, mock_session_class: MagicMock) -> None:
+        """A plain-text error body is surfaced rather than discarded."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = False
+        mock_response.status_code = 400
+        mock_response.text = "No data sources provided"
+        self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        with pytest.raises(SpiceAIError, match="No data sources provided"):
+            http.post_json("/v1/search", {"text": "tokyo"})
+
+    @patch("spicepy._http.Session")
+    def test_error_without_body(self, mock_session_class: MagicMock) -> None:
+        """An empty error body still reports the status code."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = False
+        mock_response.status_code = 503
+        mock_response.text = ""
+        self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        with pytest.raises(SpiceAIError, match="503"):
+            http.post_json("/v1/search", {"text": "tokyo"})
+
+    @patch("spicepy._http.Session")
+    def test_malformed_json_response(self, mock_session_class: MagicMock) -> None:
+        """A 200 with a non-JSON body is reported as such."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = True
+        mock_response.json.side_effect = ValueError("not json")
+        self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        with pytest.raises(SpiceAIError, match="not valid JSON"):
+            http.post_json("/v1/search", {"text": "tokyo"})
+
+
 class TestHttpRequestsSendRequestRaw:
     """Test HttpRequests.send_request_raw method."""
 

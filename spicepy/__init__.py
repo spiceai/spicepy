@@ -11,6 +11,7 @@ from ._client import Client
 from ._dataframe import SpiceDataFrame
 from ._expr import Expr, WindowFrame, case, col, lit
 from ._http import RefreshOpts
+from ._search import SearchMatch, SearchResult
 from ._status import ComponentStatus, ConnectionDetails
 
 __all__ = [
@@ -20,6 +21,8 @@ __all__ = [
     "ConnectionDetails",
     "Expr",
     "RefreshOpts",
+    "SearchMatch",
+    "SearchResult",
     "SpiceDataFrame",
     "WindowFrame",
     "case",
