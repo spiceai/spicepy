@@ -128,6 +128,124 @@ Once a `Client` is obtained queries can be made using the `query()` function. Th
 
 A custom timeout can be set by passing the `timeout` parameter in the `query` function call. If no timeout is specified, it will default to a 10 min timeout then cancel the query, and a TimeoutError exception will be raised.
 
+### Search
+
+Search datasets for documents similar to a piece of text. This requires datasets with an embedding column and a loaded embedding model — see [Search & Retrieval](https://docs.spice.ai/features/search-and-retrieval) for how to configure them.
+
+```python
+from spicepy import Client
+
+client = Client()
+
+result = client.search(
+    'tokyo plane tickets',
+    datasets=['app_messages'],
+    limit=3,
+    additional_columns=['timestamp'],
+)
+
+print(f'{len(result)} matches in {result.duration_ms}ms')
+for match in result:
+    print(match.score, match.dataset, match.matches, match.data)
+```
+
+`search()` takes the search text plus the following keyword arguments:
+
+- **datasets** (list of string, optional): Datasets to search. Omit to search every searchable dataset.
+- **limit** (int, optional): Maximum matches to return per dataset.
+- **where** (string, optional): A SQL predicate filtering candidate rows, without the leading `WHERE` — for example `'user_id = 42'`.
+- **additional_columns** (list of string, optional): Extra columns to return with each match. Primary key columns are returned under `primary_key`, the rest under `data`.
+- **keywords** (list of string, optional): Keywords for the lexical pass of a hybrid search, which the runtime combines with the vector scores into a single ranking.
+
+It returns a `SearchResult` holding `duration_ms` and a list of `SearchMatch`. Iterating the result yields the matches directly. Each `SearchMatch` has:
+
+- **dataset** (string): The dataset the match was found in.
+- **score** (float): The match's similarity to the query. Higher is more similar.
+- **matches** (dict): The matched values, keyed by source column. Each value is a list, because one column may contribute several chunks to a single match.
+- **primary_key** (dict): The primary key columns identifying the matched row. Empty when the dataset declares no primary key.
+- **data** (dict): Any `additional_columns` that were requested.
+- **metadata** (dict): Extra per-match metadata the runtime attached.
+
+### Runtime Health and Status
+
+`is_ready()` reports whether the runtime is ready to serve queries — useful for waiting
+on a runtime to come up before querying it:
+
+```python
+from spicepy import Client
+
+client = Client(http_url="http://127.0.0.1:8090")
+
+if not client.is_ready():
+    print("runtime is not ready yet")
+```
+
+When you need to know *which* component is not ready, `runtime_status()` reports each
+runtime connection separately:
+
+```python
+for component in client.runtime_status():
+    print(f"{component.name} ({component.endpoint}): {component.status}")
+
+# http (127.0.0.1:8090): Ready
+# flight (127.0.0.1:50051): Ready
+# metrics (N/A): Disabled
+# opentelemetry (127.0.0.1:50051): Ready
+```
+
+Each `ConnectionDetails` carries the component `name` (`http`, `flight`, `metrics` or
+`opentelemetry`), its `endpoint`, and its `status` — a `ComponentStatus` of
+`Initializing`, `Ready`, `Disabled`, `Error`, `Refreshing`, `ShuttingDown` or
+`NotLoaded`. `component.is_ready` is shorthand for a `Ready` status. A status added by
+a future runtime is preserved as a plain string rather than raising.
+
+### Listing and Cancelling Running Queries
+
+`list_active_queries()` reports the synchronous queries running in the caller's scope —
+those started by `query()`, `query_with_params()`, FlightSQL, NSQL and search — and
+`cancel_active_query()` stops one by id.
+
+The runtime does not hand a query's id back to the client that submitted it, so the two
+are used together: list to find the query, then cancel it.
+
+Two boundaries apply, and a query is reachable only inside both.
+
+**One runtime instance.** The runtime holds active synchronous queries in memory, per
+process, and these endpoints report only what the instance answering them knows. Behind
+a load balancer, `http_url` may resolve to an instance that never received the query —
+it will not be listed, and its id reports as not found.
+
+**One authenticated principal**, not a `Client` instance. The principal is whatever
+credential the runtime authenticates — an API key or a client certificate — so every
+client presenting the same credential lists and cancels the same queries. Only requests
+for which the runtime establishes no principal at all share the `public` scope. A query
+outside the caller's scope is reported as if it did not exist.
+
+> **Runtime version.** Principal scoping on these two endpoints landed in
+> [spiceai/spiceai#12841](https://github.com/spiceai/spiceai/pull/12841) and is in no
+> runtime release up to and including `v2.1.5`. Against an earlier runtime both calls
+> operate on every active query the instance holds, for any caller with write access.
+> Check your runtime version before relying on the scope described above.
+
+```python
+from spicepy import Client
+
+client = Client(http_url="http://127.0.0.1:8090")
+
+for query in client.list_active_queries():
+    print(f"{query.query_id} [{query.protocol}] {query.sql_preview}")
+    print(f"  started at {query.started_at.isoformat()}")
+
+# Cancel a long-running query by id.
+queries = client.list_active_queries()
+if queries:
+    client.cancel_active_query(queries[0].query_id)
+```
+
+`cancel_active_query()` returns `None` on success and raises `SpiceAIError` otherwise —
+including when the id falls outside the caller's scope, which the runtime reports as not
+found rather than cancelling.
+
 ## Documentation
 
 Check out our [Documentation](https://docs.spice.ai/sdks/python-sdk) to learn more about how to use the Python SDK.
