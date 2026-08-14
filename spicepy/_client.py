@@ -5,6 +5,8 @@ from pathlib import Path
 import platform
 import threading
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import quote
+import uuid
 
 import certifi
 import pyarrow as pa
@@ -23,6 +25,7 @@ from pyarrow._flight import (
 )
 
 from . import config
+from ._active_query import ActiveQuery
 from ._http import HttpRequests, RefreshOpts
 from ._search import SEARCH_PATH, SearchResult, build_search_body
 from ._status import ConnectionDetails
@@ -778,6 +781,121 @@ class Client:
 
         raise SpiceAIError(
             f"Unexpected response from /v1/ready: HTTP {response.status_code}."
+        )
+
+    def list_active_queries(self) -> list[ActiveQuery]:
+        """Return the synchronous queries running in the caller's scope.
+
+        Backed by ``GET /v1/sql/active``. Synchronous queries are the ones started by
+        :meth:`query`, :meth:`query_with_params`, FlightSQL, NSQL and search — not
+        async query jobs, which the runtime only serves in cluster mode.
+
+        The runtime does not return a query's id to the client that submitted it, so
+        this is how to find the id that :meth:`cancel_active_query` needs.
+
+        Results are scoped to the authenticated principal — an API key or a client
+        certificate — not to this :class:`Client`: every client presenting the same
+        credential lists the same queries, and requests for which the runtime
+        establishes no principal share its ``public`` scope.
+
+        Results also cover one runtime instance. The runtime holds active queries in
+        memory per process, so behind a load balancer ``http_url`` may resolve to an
+        instance that never received the query.
+
+        Runtime releases up to and including ``v2.1.5`` do not scope these two
+        endpoints at all; see the note in README.md.
+        """
+        response = self.http.send_request_raw("GET", "/v1/sql/active")
+
+        if response.status_code == 403:
+            raise SpiceAIError(
+                "The configured API key does not allow listing queries. Use a key "
+                "with write access."
+            )
+        if response.status_code != 200:
+            raise SpiceAIError(
+                f"Unexpected response from /v1/sql/active: HTTP {response.status_code}."
+            )
+
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise SpiceAIError(
+                f"Unexpected response from /v1/sql/active: expected an object, got "
+                f"{type(payload).__name__}."
+            )
+
+        queries = payload.get("queries", [])
+        if not isinstance(queries, list):
+            raise SpiceAIError(
+                f"Unexpected response from /v1/sql/active: expected 'queries' to be a "
+                f"list, got {type(queries).__name__}."
+            )
+
+        for index, item in enumerate(queries):
+            if not isinstance(item, dict):
+                raise SpiceAIError(
+                    f"Unexpected response from /v1/sql/active: expected query {index} "
+                    f"to be an object, got {type(item).__name__}."
+                )
+
+        return [ActiveQuery.from_dict(item) for item in queries]
+
+    def cancel_active_query(self, query_id: str) -> None:
+        """Cancel a running synchronous query by id.
+
+        Backed by ``POST /v1/sql/{query_id}/cancel``. ``query_id`` comes from
+        :meth:`list_active_queries`. Cancellation is scoped to the authenticated
+        principal, not to this :class:`Client`: any client presenting the same
+        credential can cancel the query, while an id outside that scope is reported as
+        not found. Like :meth:`list_active_queries` it reaches one runtime instance and
+        carries the same runtime-version caveat.
+
+        Returns ``None`` on success and raises :class:`SpiceAIError` otherwise.
+        """
+        if not query_id:
+            raise SpiceAIError(
+                "query_id is required. Use list_active_queries() to find one."
+            )
+
+        # query_id is caller input and reaches the runtime as a path segment.
+        # Reject anything that is not a UUID here rather than building a path
+        # from it: "." and ".." are unreserved, so quoting leaves them intact
+        # and requests then resolves them away — ".." would send this POST to
+        # /v1/cancel, a route the caller never named.
+        try:
+            uuid.UUID(query_id)
+        except ValueError as exc:
+            raise SpiceAIError(
+                f"Query id {query_id!r} is not a valid UUID. Use the query_id from "
+                f"list_active_queries()."
+            ) from exc
+
+        quoted_query_id = quote(query_id, safe="")
+        response = self.http.send_request_raw(
+            "POST", f"/v1/sql/{quoted_query_id}/cancel"
+        )
+
+        if response.status_code == 200:
+            return
+        if response.status_code == 400:
+            raise SpiceAIError(
+                f"Query id {query_id!r} is not a valid UUID. Use the query_id from "
+                f"list_active_queries()."
+            )
+        if response.status_code == 403:
+            raise SpiceAIError(
+                "The configured API key does not allow cancelling queries. Use a key "
+                "with write access."
+            )
+        if response.status_code == 404:
+            raise SpiceAIError(
+                f"No active query {query_id!r} found. It may have already finished, "
+                f"or it was submitted under a different API key."
+            )
+
+        raise SpiceAIError(
+            f"Unexpected response from /v1/sql/{quoted_query_id}/cancel: "
+            f"HTTP {response.status_code}."
         )
 
     def refresh_dataset(
