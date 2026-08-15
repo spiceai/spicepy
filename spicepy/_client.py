@@ -27,6 +27,13 @@ from pyarrow._flight import (
 from . import config
 from ._active_query import ActiveQuery
 from ._http import HttpRequests, RefreshOpts
+from ._nsql import (
+    NSQL_JSON_MEDIA_TYPE,
+    NSQL_PATH,
+    NSQL_SQL_MEDIA_TYPE,
+    NsqlResult,
+    build_nsql_body,
+)
 from ._search import SEARCH_PATH, SearchResult, build_search_body
 from ._status import ConnectionDetails
 from .error import SpiceAIError
@@ -975,6 +982,97 @@ class Client:
             keywords=keywords,
         )
         return SearchResult.from_json(self.http.post_json(SEARCH_PATH, body))
+
+    # ------------------------------------------------------------------
+    # Text-to-SQL (NSQL)
+    # ------------------------------------------------------------------
+
+    def nsql(
+        self,
+        query: str,
+        *,
+        model: str | None = None,
+        datasets: list[str] | None = None,
+        sample_data_enabled: bool | None = None,
+        prompt_cache_key: str | None = None,
+    ) -> NsqlResult:
+        """Answer ``query`` by generating SQL and running it.
+
+        Backed by ``POST /v1/nsql``: the configured LLM translates the question,
+        the runtime executes the result read-only, and both the rows and the
+        generated SQL come back. Requires an LLM model in the Spicepod — see
+        https://docs.spice.ai/features/text-to-sql for how to configure one.
+
+        Example:
+            result = client.nsql(
+                "top 5 customers by revenue",
+                datasets=["sales"],
+            )
+            print(result.sql)
+            for row in result:
+                print(row)
+
+        Args:
+            query: The question to answer, in natural language.
+            model: The LLM used to generate SQL. Omit when the Spicepod
+                configures exactly one compatible model.
+            datasets: Datasets to sample when building the model's context.
+                This is a sampling hint — it does not restrict which tables the
+                generated query may reference. Omit to use all of them.
+            sample_data_enabled: Include sample rows in the model's context.
+                Improves generation on ambiguous schemas, at the cost of
+                sending data values to the model.
+            prompt_cache_key: A stable key forwarded to the model provider for
+                prompt caching.
+
+        Returns:
+            An :class:`~spicepy.NsqlResult` holding the generated SQL, the
+            rows, and their schema.
+
+        Raises:
+            ValueError: If ``query`` is empty or ``datasets`` is an empty list.
+            SpiceAIError: If the runtime rejects the request or is unreachable.
+                A missing or ambiguous model reports here.
+        """
+        body = build_nsql_body(
+            query,
+            model=model,
+            datasets=datasets,
+            sample_data_enabled=sample_data_enabled,
+            prompt_cache_key=prompt_cache_key,
+        )
+        return NsqlResult.from_json(
+            self.http.post_json(NSQL_PATH, body, NSQL_JSON_MEDIA_TYPE)
+        )
+
+    def nsql_generate_sql(
+        self,
+        query: str,
+        *,
+        model: str | None = None,
+        datasets: list[str] | None = None,
+        sample_data_enabled: bool | None = None,
+        prompt_cache_key: str | None = None,
+    ) -> str:
+        """Translate ``query`` into SQL without running it.
+
+        Use it to inspect or edit the query before running it, or to run it
+        through :meth:`query` so results arrive as Arrow rather than decoded
+        JSON.
+
+        Takes the same arguments as :meth:`nsql` and raises the same errors.
+
+        Returns:
+            The generated SQL.
+        """
+        body = build_nsql_body(
+            query,
+            model=model,
+            datasets=datasets,
+            sample_data_enabled=sample_data_enabled,
+            prompt_cache_key=prompt_cache_key,
+        )
+        return self.http.post_text(NSQL_PATH, body, NSQL_SQL_MEDIA_TYPE)
 
 
 class _ArrowFlightCallThread(threading.Thread):

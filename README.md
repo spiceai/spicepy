@@ -166,6 +166,40 @@ It returns a `SearchResult` holding `duration_ms` and a list of `SearchMatch`. I
 - **data** (dict): Any `additional_columns` that were requested.
 - **metadata** (dict): Extra per-match metadata the runtime attached.
 
+### Text-to-SQL (NSQL)
+
+`nsql()` answers a question in natural language: the configured LLM generates SQL, the runtime runs it read-only, and both the rows and the generated query come back. It requires an LLM model in the Spicepod — see [Text to SQL](https://docs.spice.ai/features/text-to-sql) for how to configure one.
+
+```python
+from spicepy import Client
+
+client = Client()
+
+result = client.nsql('top 5 customers by revenue', datasets=['sales'])
+
+print('generated SQL:', result.sql)
+for row in result:
+    print(row)
+```
+
+`nsql()` takes the question plus the following keyword arguments:
+
+- **model** (string, optional): The LLM used to generate SQL. Omit when the Spicepod configures exactly one compatible model.
+- **datasets** (list of string, optional): Datasets to sample when building the model's context. This is a sampling hint — it does not restrict which tables the generated query may reference.
+- **sample_data_enabled** (bool, optional): Include sample rows in the model's context. Improves generation on ambiguous schemas, at the cost of sending data values to the model.
+- **prompt_cache_key** (string, optional): A stable key forwarded to the model provider for prompt caching.
+
+It returns an `NsqlResult` holding `sql`, `row_count`, `schema` (a list of `NsqlField`), and `data`. Iterating the result yields the rows directly.
+
+Values in `data` are decoded from JSON, so they carry JSON's types rather than the Arrow types named in `schema`. When Arrow types matter, generate the query and run it yourself — which is also how to inspect or edit a generated query before it runs:
+
+```python
+sql = client.nsql_generate_sql('top 5 customers by revenue')
+print(sql)
+
+table = client.query(sql).read_all()
+```
+
 ### Runtime Health and Status
 
 `is_ready()` reports whether the runtime is ready to serve queries — useful for waiting

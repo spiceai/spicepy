@@ -74,15 +74,45 @@ class HttpRequests:
         response.raise_for_status()
         return response.json()
 
-    def post_json(self, path: str, payload: dict[str, Any]) -> Any:
+    def post_json(
+        self, path: str, payload: dict[str, Any], accept: str | None = None
+    ) -> Any:
         """POST a JSON payload and decode the JSON response.
 
         Unlike `send_request`, a failed request raises `SpiceAIError` carrying
         the runtime's own explanation. The runtime reports errors on these
         endpoints as a plain-text body, which `raise_for_status` discards.
+
+        `accept` selects a response representation where an endpoint offers
+        more than one.
         """
+        response = self.post_raw(path, payload, accept)
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise SpiceAIError(
+                f"{path} returned a response that was not valid JSON"
+            ) from exc
+
+    def post_text(
+        self, path: str, payload: dict[str, Any], accept: str | None = None
+    ) -> str:
+        """POST a JSON payload and return the response body as text.
+
+        For endpoints that answer some media types with something other than
+        JSON — ``/v1/nsql`` returns bare SQL for ``application/sql``.
+        """
+        return self.post_raw(path, payload, accept).text.strip()
+
+    def post_raw(
+        self, path: str, payload: dict[str, Any], accept: str | None = None
+    ) -> Response:
+        """POST a JSON payload, raising `SpiceAIError` on a non-2xx status."""
         headers = dict(self.session.headers)
         headers["Content-Type"] = "application/json"
+        if accept is not None:
+            headers["Accept"] = accept
 
         response: Response = self.session.post(
             url=f"{self.base_url}{path}",
@@ -98,12 +128,7 @@ class HttpRequests:
                 + (f": {detail}" if detail else "")
             )
 
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise SpiceAIError(
-                f"{path} returned a response that was not valid JSON"
-            ) from exc
+        return response
 
     # pylint: disable=R0913
     # pylint: disable=R0917
