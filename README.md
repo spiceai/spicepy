@@ -19,7 +19,7 @@ pip install git+https://github.com/spiceai/spicepy@v3.1.0
 For parameterized query support, install with the optional `params` extra:
 
 ```bash
-pip install "spicepy[params]"
+pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v3.1.0"
 ```
 
 ## Usage
@@ -120,6 +120,8 @@ Querying data is done through a `Client` object that initialize the connection w
 - **url** (string, optional): URL of the endpoint to use (default: grpc+tls://flight.spiceai.io; firecache: grpc+tls://firecache.spiceai.io)
 - **tls_root_cert** (Path or string, optional): Path to the tls certificate to use for the secure connection (omit for automatic detection)
 - **user_agent** (string, optional): A custom `User-Agent` string to pass when connecting to Spice. Use `spicepy.config.get_user_agent` to build the custom `User-Agent`
+- **tls_client_certificate** (Path or string, optional): Path to a PEM-encoded client certificate for mTLS. Must be provided together with `tls_client_key`.
+- **tls_client_key** (Path or string, optional): Path to a PEM-encoded client private key for mTLS. Must be provided together with `tls_client_certificate`.
 
 Once a `Client` is obtained queries can be made using the `query()` function. The `query()` function has the following arguments:
 
@@ -127,6 +129,25 @@ Once a `Client` is obtained queries can be made using the `query()` function. Th
 - **timeout** (int, optional): The timeout in seconds.
 
 A custom timeout can be set by passing the `timeout` parameter in the `query` function call. If no timeout is specified, it will default to a 10 min timeout then cancel the query, and a TimeoutError exception will be raised.
+
+### TLS and mTLS
+
+> **Note:** mTLS (client certificate authentication) is an [Enterprise](https://docs.spice.ai/docs/enterprise) feature of the Spice.ai runtime.
+
+The client accepts PEM certificate file paths for custom server verification and mutual TLS:
+
+```python
+from spicepy import Client
+
+client = Client(
+    flight_url="grpc+tls://my-spice-host:50051",
+    tls_root_cert="./certs/ca.pem",  # custom CA for server verification (optional)
+    tls_client_certificate="./certs/client.pem",  # ┐ provide both to enable mTLS
+    tls_client_key="./certs/client.key",  #          ┘
+)
+```
+
+`tls_client_certificate` and `tls_client_key` must be provided together; the client certificate is presented during the TLS handshake. The Spice runtime must be configured with `client_auth_mode: request` or `required`. See the [mTLS cookbook recipe](https://github.com/spiceai/cookbook/tree/trunk/mtls) for a complete walkthrough.
 
 ### Search
 
