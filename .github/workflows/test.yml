@@ -229,7 +229,7 @@ jobs:
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
           TEST_SPICE_CLOUD: 'false'
         run: |
-          pytest -s tests/test_main.py -k "not cloud"
+          pytest -s tests/test_main.py tests/test_integration_local.py -k "not cloud"
 
       - name: Stop spice and check logs
         working-directory: spice_qs

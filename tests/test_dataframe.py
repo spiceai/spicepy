@@ -27,6 +27,13 @@ def df(client: MagicMock) -> SpiceDataFrame:
     return SpiceDataFrame(client, 'SELECT * FROM "trips"')
 
 
+def mock_schema(client: MagicMock, *names: str) -> None:
+    """Serve *names as the schema of the mocked zero-row probe query."""
+    client.query.return_value.read_all.return_value.schema = pa.schema(
+        [pa.field(n, pa.int64()) for n in names]
+    )
+
+
 class TestProjection:
     def test_select(self, df: SpiceDataFrame) -> None:
         assert df.select(col("city")).to_sql() == (
@@ -54,22 +61,31 @@ class TestProjection:
     def test_with_columns_empty_noop(self, df: SpiceDataFrame) -> None:
         assert df.with_columns().to_sql() == df.to_sql()
 
-    def test_drop(self, df: SpiceDataFrame) -> None:
-        assert df.drop("a", "b").to_sql() == (
-            'SELECT * EXCLUDE ("a", "b") FROM (SELECT * FROM "trips")'
-        )
+    def test_drop(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        mock_schema(client, "a", "b", "c")
+        assert df.drop("a", "b").to_sql() == ('SELECT "c" FROM (SELECT * FROM "trips")')
+
+    def test_drop_every_column_raises(
+        self, df: SpiceDataFrame, client: MagicMock
+    ) -> None:
+        mock_schema(client, "a")
+        with pytest.raises(ValueError, match="every column"):
+            df.drop("a")
 
     def test_drop_empty_noop(self, df: SpiceDataFrame) -> None:
         assert df.drop().to_sql() == df.to_sql()
 
-    def test_rename(self, df: SpiceDataFrame) -> None:
+    def test_rename(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        mock_schema(client, "old", "other")
         assert df.rename({"old": "new"}).to_sql() == (
-            'SELECT * REPLACE ("old" AS "new") FROM (SELECT * FROM "trips")'
+            'SELECT "old" AS "new", "other" FROM (SELECT * FROM "trips")'
         )
 
-    def test_cast(self, df: SpiceDataFrame) -> None:
-        sql = df.cast({"x": pa.int32()}).to_sql()
-        assert 'CAST("x" AS INT) AS "x"' in sql
+    def test_cast(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        mock_schema(client, "x", "y")
+        assert df.cast({"x": pa.int32()}).to_sql() == (
+            'SELECT CAST("x" AS INT) AS "x", "y" FROM (SELECT * FROM "trips")'
+        )
 
 
 class TestFilter:
@@ -103,6 +119,18 @@ class TestSlice:
 
     def test_head(self, df: SpiceDataFrame) -> None:
         assert df.head(3).to_sql() == df.limit(3).to_sql()
+
+    def test_limit_after_sort_shares_the_order_by_level(
+        self, df: SpiceDataFrame
+    ) -> None:
+        """A wrapped subquery's ORDER BY is not guaranteed to survive planning."""
+        assert df.sort(col("fare")).limit(5).to_sql() == (
+            'SELECT * FROM (SELECT * FROM "trips") ORDER BY "fare" LIMIT 5'
+        )
+
+    def test_limit_after_limit_wraps(self, df: SpiceDataFrame) -> None:
+        sql = df.sort(col("fare")).limit(5).limit(3).to_sql()
+        assert sql.endswith('ORDER BY "fare" LIMIT 5) LIMIT 3')
 
     def test_tail_raises(self, df: SpiceDataFrame) -> None:
         with pytest.raises(NotImplementedError):
@@ -308,14 +336,16 @@ class TestArrowCStream:
 
 
 class TestUnnest:
-    def test_unnest_single(self, df: SpiceDataFrame) -> None:
+    def test_unnest_single(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        mock_schema(client, "tags", "city")
         assert df.unnest("tags").to_sql() == (
-            'SELECT * REPLACE (unnest("tags") AS "tags") FROM (SELECT * FROM "trips")'
+            'SELECT unnest("tags") AS "tags", "city" FROM (SELECT * FROM "trips")'
         )
 
-    def test_unnest_multiple(self, df: SpiceDataFrame) -> None:
+    def test_unnest_multiple(self, df: SpiceDataFrame, client: MagicMock) -> None:
+        mock_schema(client, "a", "b", "c")
         sql = df.unnest("a", "b").to_sql()
-        assert 'unnest("a") AS "a", unnest("b") AS "b"' in sql
+        assert 'unnest("a") AS "a", unnest("b") AS "b", "c"' in sql
 
     def test_unnest_empty_raises(self, df: SpiceDataFrame) -> None:
         with pytest.raises(ValueError, match="at least one column"):
