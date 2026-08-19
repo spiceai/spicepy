@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import gc
 import os
 from pathlib import Path
@@ -451,7 +452,7 @@ class TestADBCClientStreaming:
     def _source(cls, pulled: list[int], count: int = 3) -> pa.RecordBatchReader:
         """A reader that records each batch as it is pulled off the wire."""
 
-        def batches() -> object:
+        def batches() -> Iterator[pa.RecordBatch]:
             for i in range(count):
                 pulled.append(i)
                 yield pa.record_batch(
@@ -556,6 +557,26 @@ class TestADBCClientStreaming:
         reader.close()
         del reader
         gc.collect()
+
+        stmt.close.assert_called_once()
+
+    def test_statement_is_released_even_if_reader_close_raises(self) -> None:
+        """A failing reader.close() must not leak the statement."""
+        from spicepy._client import _stream_until_closed
+
+        class FailingCloseReader:
+            schema = TestADBCClientStreaming.SCHEMA
+
+            def __iter__(self) -> Iterator[pa.RecordBatch]:
+                return iter(())
+
+            def close(self) -> None:
+                raise OSError("close failed")
+
+        stmt = MagicMock()
+
+        with pytest.raises(OSError, match="close failed"):
+            _stream_until_closed(FailingCloseReader(), stmt).read_all()
 
         stmt.close.assert_called_once()
 

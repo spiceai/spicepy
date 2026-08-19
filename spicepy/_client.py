@@ -87,8 +87,10 @@ def _stream_until_closed(
         try:
             yield from reader
         finally:
-            reader.close()
-            stmt.close()
+            try:
+                reader.close()
+            finally:
+                stmt.close()
 
     return pa.RecordBatchReader.from_batches(schema, batches())
 
