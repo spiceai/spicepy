@@ -36,6 +36,9 @@ _JOIN_KINDS = {
     "cross": "CROSS JOIN",
 }
 
+# Rows fetched to render a notebook (_repr_html_) preview.
+_HTML_PREVIEW_ROWS = 10
+
 
 def _as_expr(value: Any) -> Expr:
     if isinstance(value, Expr):
@@ -185,11 +188,13 @@ class SpiceDataFrame:
         op = "UNION ALL" if all else "UNION"
         return self._wrap(f"{self._sql} {op} {other._sql}")
 
-    def intersect(self, other: SpiceDataFrame) -> SpiceDataFrame:
-        return self._wrap(f"{self._sql} INTERSECT {other._sql}")
+    def intersect(self, other: SpiceDataFrame, all: bool = False) -> SpiceDataFrame:
+        op = "INTERSECT ALL" if all else "INTERSECT"
+        return self._wrap(f"{self._sql} {op} {other._sql}")
 
-    def except_(self, other: SpiceDataFrame) -> SpiceDataFrame:
-        return self._wrap(f"{self._sql} EXCEPT {other._sql}")
+    def except_(self, other: SpiceDataFrame, all: bool = False) -> SpiceDataFrame:
+        op = "EXCEPT ALL" if all else "EXCEPT"
+        return self._wrap(f"{self._sql} {op} {other._sql}")
 
     # ------------------------------------------------------------------
     # Joins
@@ -400,6 +405,39 @@ class SpiceDataFrame:
     def write_json(self, path: str) -> None:
         """Write this DataFrame's result to ``path`` as newline-delimited JSON."""
         self._client.write_json(self._sql, path)
+
+    # ------------------------------------------------------------------
+    # Interop / display
+    # ------------------------------------------------------------------
+
+    def __getitem__(self, key: str | list[str]) -> SpiceDataFrame:
+        """Select column(s): ``df["a"]`` or ``df[["a", "b"]]``."""
+        if isinstance(key, str):
+            return self.select(_col_builder(key))
+        if isinstance(key, list):
+            if not key:
+                raise KeyError("column selection requires at least one column")
+            if not all(isinstance(k, str) for k in key):
+                raise TypeError("column names in a selection list must be strings")
+            return self.select(*[_col_builder(k) for k in key])
+        raise TypeError(
+            f"index must be a column name or list of names, got {type(key).__name__}"
+        )
+
+    def __arrow_c_stream__(self, requested_schema: object = None) -> object:
+        """Expose results via the Arrow C stream interface (PyCapsule protocol).
+
+        Lets Arrow-native consumers ingest a SpiceDataFrame directly — e.g.
+        ``pyarrow.table(df)``, ``polars.DataFrame(df)``, or DuckDB. The result
+        is materialized, then its Arrow C stream is handed off.
+        """
+        return self.collect().__arrow_c_stream__(requested_schema)
+
+    def _repr_html_(self) -> str:
+        """Render a preview (first rows) as an HTML table for notebooks."""
+        preview = self.limit(_HTML_PREVIEW_ROWS).to_pandas()
+        caption = f"SpiceDataFrame preview (up to {_HTML_PREVIEW_ROWS} rows)"
+        return f"{preview.to_html(index=False)}<em>{caption}</em>"
 
     def __repr__(self) -> str:
         return f"SpiceDataFrame({self._sql})"
