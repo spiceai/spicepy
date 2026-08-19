@@ -368,10 +368,16 @@ class _Func(Expr):
 
     def over(
         self,
-        partition_by: list[Expr] | None = None,
-        order_by: list[Expr | _SortExpr] | None = None,
+        partition_by: Expr | list[Expr] | None = None,
+        order_by: Expr | _SortExpr | list[Expr | _SortExpr] | None = None,
         frame: WindowFrame | None = None,
     ) -> Expr:
+        # A bare Expr must be boxed here: Expr supports __getitem__ (array
+        # indexing), so iterating one yields index expressions forever.
+        if isinstance(partition_by, Expr):
+            partition_by = [partition_by]
+        if isinstance(order_by, (Expr, _SortExpr)):
+            order_by = [order_by]
         return _Window(self, partition_by or [], order_by or [], frame)
 
 

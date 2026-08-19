@@ -394,6 +394,17 @@ class TestWindowFunctions:
         sql = F.row_number().over(partition_by=[col("city")]).to_sql()
         assert sql == 'ROW_NUMBER() OVER (PARTITION BY "city")'
 
+    def test_over_accepts_bare_exprs(self) -> None:
+        """A scalar partition/order key must be boxed, not iterated as an Expr."""
+        sql = (
+            F.row_number()
+            .over(partition_by=col("city"), order_by=col("ts").desc())
+            .to_sql()
+        )
+        assert sql == (
+            'ROW_NUMBER() OVER (PARTITION BY "city" ORDER BY "ts" DESC NULLS FIRST)'
+        )
+
     def test_rank_ordered(self) -> None:
         sql = F.rank().over(order_by=[col("ts").desc()]).to_sql()
         assert sql == 'RANK() OVER (ORDER BY "ts" DESC NULLS FIRST)'
