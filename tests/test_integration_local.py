@@ -11,6 +11,8 @@ embedding/LLM model) and mTLS (needs an enterprise runtime with certificates).
 
 from __future__ import annotations
 
+import contextlib
+import importlib.util
 import json
 import threading
 import time
@@ -22,22 +24,36 @@ from spicepy import Client, col, lit
 from spicepy import functions as F
 from spicepy.config import DEFAULT_LOCAL_FLIGHT_URL, DEFAULT_LOCAL_HTTP_URL
 
-try:
-    import polars as pl  # noqa: F401
-
-    POLARS_AVAILABLE = True
-except ImportError:
-    POLARS_AVAILABLE = False
-
-try:
-    import adbc_driver_flightsql  # noqa: F401
-    import adbc_driver_manager  # noqa: F401
-
-    ADBC_AVAILABLE = True
-except ImportError:
-    ADBC_AVAILABLE = False
+POLARS_AVAILABLE = importlib.util.find_spec("polars") is not None
+ADBC_AVAILABLE = (
+    importlib.util.find_spec("adbc_driver_flightsql") is not None
+    and importlib.util.find_spec("adbc_driver_manager") is not None
+)
 
 pytestmark = pytest.mark.integration
+
+
+def _row_count(client: Client) -> int:
+    table = client.query_arrow("SELECT count(*) AS n FROM taxi_trips")
+    return int(table.column("n")[0].as_py())
+
+
+def _ensure_full_dataset(client: Client) -> None:
+    """Restore taxi_trips if an earlier test left it truncated.
+
+    ``test_main.py::test_local_runtime_refresh`` refreshes the dataset with a
+    ``LIMIT 20`` refresh_sql, and this module's row-count and slow-query
+    assumptions need the real dataset back.
+    """
+    if _row_count(client) >= 100_000:
+        return
+    client.refresh_dataset("taxi_trips", None)
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        if _row_count(client) >= 100_000:
+            return
+        time.sleep(2)
+    raise AssertionError("taxi_trips did not reload to full size in time")
 
 
 @pytest.fixture(scope="module", name="client")
@@ -45,14 +61,16 @@ def client_fixture() -> Client:
     """One shared client; fails the module fast when no runtime is up."""
     c = Client(flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=DEFAULT_LOCAL_HTTP_URL)
     deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        try:
-            if c.is_ready():
-                return c
-        except Exception:  # noqa: S110 - not up yet
-            pass
-        time.sleep(1)
-    pytest.fail("Spice runtime did not become ready in time")
+    ready = False
+    while not ready and time.monotonic() < deadline:
+        with contextlib.suppress(Exception):  # not up yet
+            ready = c.is_ready()
+        if not ready:
+            time.sleep(1)
+    if not ready:
+        raise AssertionError("Spice runtime did not become ready in time")
+    _ensure_full_dataset(c)
+    return c
 
 
 # ============== Runtime status ==============

@@ -289,7 +289,7 @@ jobs:
           pip install ".[test]"
       - name: Run coverage
         run: |
-          pytest --cov=spicepy --cov-report=xml --cov-report=term-missing --ignore=tests/test_main.py tests/
+          pytest --cov=spicepy --cov-report=xml --cov-report=term-missing -m "unit or not (integration or cloud or slow)" --ignore=tests/test_main.py tests/
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
