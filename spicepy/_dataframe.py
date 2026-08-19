@@ -51,16 +51,26 @@ def _as_expr(value: Any) -> Expr:
 class SpiceDataFrame:
     """A lazy query plan that compiles to SQL on materialization."""
 
-    def __init__(self, client: Client, sql: str) -> None:
+    def __init__(self, client: Client, sql: str, *, ordered: bool = False) -> None:
         self._client = client
         self._sql = sql
+        self._ordered = ordered
 
     # ------------------------------------------------------------------
     # SQL lineage primitives
     # ------------------------------------------------------------------
 
-    def _wrap(self, sql: str) -> SpiceDataFrame:
-        return SpiceDataFrame(self._client, sql)
+    def _wrap(self, sql: str, *, ordered: bool = False) -> SpiceDataFrame:
+        return SpiceDataFrame(self._client, sql, ordered=ordered)
+
+    def _column_names(self) -> list[str]:
+        """Column names of this frame, resolved with a zero-row query.
+
+        Operations that rewrite the projection column-by-column (``drop``,
+        ``rename``, ``cast``, ``unnest``) need the full column list: the
+        runtime's SQL parser has no ``* EXCLUDE``/``* REPLACE`` star modifiers.
+        """
+        return list(self.schema().names)
 
     def _from(self) -> str:
         """Return ``(<inner_sql>)`` for use as a FROM source."""
@@ -95,28 +105,44 @@ class SpiceDataFrame:
         return self._wrap(f"SELECT *, {', '.join(parts)} FROM {self._from()}")
 
     def drop(self, *columns: str) -> SpiceDataFrame:
+        """Drop columns (resolves the frame's schema with a zero-row query)."""
         if not columns:
             return self
-        rendered = ", ".join(quote_ident(c) for c in columns)
-        return self._wrap(f"SELECT * EXCLUDE ({rendered}) FROM {self._from()}")
+        dropped = set(columns)
+        remaining = [c for c in self._column_names() if c not in dropped]
+        if not remaining:
+            raise ValueError("drop() would remove every column")
+        rendered = ", ".join(quote_ident(c) for c in remaining)
+        return self._wrap(f"SELECT {rendered} FROM {self._from()}")
 
     def rename(self, mapping: dict[str, str]) -> SpiceDataFrame:
+        """Rename columns (resolves the frame's schema with a zero-row query)."""
         if not mapping:
             return self
-        renames = ", ".join(
-            f"{quote_ident(old)} AS {quote_ident(new)}" for old, new in mapping.items()
-        )
-        return self._wrap(f"SELECT * REPLACE ({renames}) FROM {self._from()}")
+        parts = [
+            (
+                f"{quote_ident(c)} AS {quote_ident(mapping[c])}"
+                if c in mapping
+                else quote_ident(c)
+            )
+            for c in self._column_names()
+        ]
+        return self._wrap(f"SELECT {', '.join(parts)} FROM {self._from()}")
 
     def cast(self, mapping: dict[str, Any]) -> SpiceDataFrame:
+        """Cast columns in place (resolves the frame's schema with a zero-row query)."""
         if not mapping:
             return self
         # Reuse Expr.cast for type-name handling.
-        renamed = {
-            name: _col_builder(name).cast(target).alias(name)
-            for name, target in mapping.items()
-        }
-        return self.with_columns(**renamed)
+        parts = [
+            (
+                _col_builder(c).cast(mapping[c]).alias(c).to_sql()
+                if c in mapping
+                else quote_ident(c)
+            )
+            for c in self._column_names()
+        ]
+        return self._wrap(f"SELECT {', '.join(parts)} FROM {self._from()}")
 
     # ------------------------------------------------------------------
     # Filter / slice
@@ -135,6 +161,10 @@ class SpiceDataFrame:
             if offset < 0:
                 raise ValueError("offset must be non-negative")
             clause = f"{clause} OFFSET {offset}"
+        if self._ordered:
+            # LIMIT must share the ORDER BY's query level: wrapping a sorted
+            # frame in a subquery frees the planner to discard its ordering.
+            return self._wrap(f"{self._sql} {clause}")
         return self._wrap(f"SELECT * FROM {self._from()} {clause}")
 
     def head(self, n: int = 5) -> SpiceDataFrame:
@@ -160,7 +190,9 @@ class SpiceDataFrame:
                 parts.append(e.to_sql())
             else:
                 parts.append(_sort_sql(_as_expr(e)))
-        return self._wrap(f"SELECT * FROM {self._from()} ORDER BY {', '.join(parts)}")
+        return self._wrap(
+            f"SELECT * FROM {self._from()} ORDER BY {', '.join(parts)}", ordered=True
+        )
 
     order_by = sort
 
@@ -171,14 +203,21 @@ class SpiceDataFrame:
         """Explode array column(s) into one row per element.
 
         Non-unnested columns repeat for each element (DataFusion evaluates
-        ``unnest`` in the projection).
+        ``unnest`` in the projection). Resolves the frame's schema with a
+        zero-row query.
         """
         if not columns:
             raise ValueError("unnest() requires at least one column")
-        replacements = ", ".join(
-            f"unnest({quote_ident(c)}) AS {quote_ident(c)}" for c in columns
-        )
-        return self._wrap(f"SELECT * REPLACE ({replacements}) FROM {self._from()}")
+        targets = set(columns)
+        parts = [
+            (
+                f"unnest({quote_ident(c)}) AS {quote_ident(c)}"
+                if c in targets
+                else quote_ident(c)
+            )
+            for c in self._column_names()
+        ]
+        return self._wrap(f"SELECT {', '.join(parts)} FROM {self._from()}")
 
     # ------------------------------------------------------------------
     # Set operations
