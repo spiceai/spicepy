@@ -162,6 +162,10 @@ ignore = [
     "ANN205", # Missing return type annotation for staticmethod
     "ANN206", # Missing return type annotation for classmethod
     "PLR0913", # Too many arguments in function definition
+    "PLR0917", # Too many positional arguments (stabilized in ruff 0.16; the
+               # positional counterpart of PLR0913, already ignored above.
+               # Satisfying it would mean making existing client constructor
+               # parameters keyword-only, which is a breaking API change.)
     "PLR0911", # Too many return statements
     "PLR0915", # Too many statements
     "S101",   # Use of assert detected (needed for tests)

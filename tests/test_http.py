@@ -386,6 +386,148 @@ class TestHttpRequestsSendRequest:
         )
 
 
+class TestHttpRequestsPostJson:
+    """Test HttpRequests.post_json method."""
+
+    @staticmethod
+    def _session(mock_session_class: MagicMock, response: MagicMock) -> MagicMock:
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_session.post.return_value = response
+        mock_session_class.return_value = mock_session
+        return mock_session
+
+    @patch("spicepy._http.Session")
+    def test_posts_json_body(self, mock_session_class: MagicMock) -> None:
+        """The payload is serialized as JSON with a JSON content type."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = True
+        mock_response.json.return_value = {"results": []}
+        mock_session = self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        result = http.post_json("/v1/search", {"text": "tokyo"})
+
+        assert result == {"results": []}
+        kwargs = mock_session.post.call_args.kwargs
+        assert kwargs["url"] == "http://example.com/v1/search"
+        assert kwargs["data"] == '{"text": "tokyo"}'
+        assert kwargs["headers"]["Content-Type"] == "application/json"
+
+    @patch("spicepy._http.Session")
+    def test_error_carries_runtime_message(self, mock_session_class: MagicMock) -> None:
+        """A plain-text error body is surfaced rather than discarded."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = False
+        mock_response.status_code = 400
+        mock_response.text = "No data sources provided"
+        self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        with pytest.raises(SpiceAIError, match="No data sources provided"):
+            http.post_json("/v1/search", {"text": "tokyo"})
+
+    @patch("spicepy._http.Session")
+    def test_error_without_body(self, mock_session_class: MagicMock) -> None:
+        """An empty error body still reports the status code."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = False
+        mock_response.status_code = 503
+        mock_response.text = ""
+        self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        with pytest.raises(SpiceAIError, match="503"):
+            http.post_json("/v1/search", {"text": "tokyo"})
+
+    @patch("spicepy._http.Session")
+    def test_malformed_json_response(self, mock_session_class: MagicMock) -> None:
+        """A 200 with a non-JSON body is reported as such."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = True
+        mock_response.json.side_effect = ValueError("not json")
+        self._session(mock_session_class, mock_response)
+
+        http = HttpRequests("http://example.com", {})
+        with pytest.raises(SpiceAIError, match="not valid JSON"):
+            http.post_json("/v1/search", {"text": "tokyo"})
+
+
+class TestHttpRequestsSendRequestRaw:
+    """Test HttpRequests.send_request_raw method."""
+
+    @patch("spicepy._http.Session")
+    def test_returns_response_without_decoding(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """The raw Response is returned, not a decoded body."""
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+        result = http.send_request_raw("GET", "/v1/ready")
+
+        assert result is mock_response
+        mock_response.json.assert_not_called()
+
+    @patch("spicepy._http.Session")
+    def test_does_not_raise_on_error_status(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """A non-2xx status is left to the caller to interpret."""
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_response.status_code = 503
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+        result = http.send_request_raw("GET", "/v1/ready")
+
+        assert result.status_code == 503
+        mock_response.raise_for_status.assert_not_called()
+
+    @patch("spicepy._http.Session")
+    def test_merges_session_headers(self, mock_session_class: MagicMock) -> None:
+        """Session headers are applied, as with send_request."""
+        mock_session = MagicMock()
+        mock_session.headers = {"X-API-Key": "secret"}
+        mock_session.get.return_value = MagicMock(spec=Response)
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {"X-API-Key": "secret"})
+        http.send_request_raw("GET", "/v1/ready")
+
+        sent_headers = mock_session.get.call_args.kwargs["headers"]
+        assert sent_headers["X-API-Key"] == "secret"
+
+    @patch("spicepy._http.Session")
+    def test_does_not_mutate_caller_headers(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """The caller's headers dict is left untouched; session headers still win."""
+        mock_session = MagicMock()
+        mock_session.get.return_value = MagicMock(spec=Response)
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {"X-API-Key": "session"})
+        caller_headers = {"X-API-Key": "caller", "Content-Type": "application/json"}
+        http.send_request_raw("GET", "/v1/ready", headers=caller_headers)
+
+        assert caller_headers == {
+            "X-API-Key": "caller",
+            "Content-Type": "application/json",
+        }
+        sent_headers = mock_session.get.call_args.kwargs["headers"]
+        assert sent_headers["X-API-Key"] == "session"
+        assert sent_headers["Content-Type"] == "application/json"
+        assert sent_headers["user-agent"] == SPICE_USER_AGENT
+
+
 class TestHttpRequestsRetryConfiguration:
     """Test HttpRequests retry configuration."""
 

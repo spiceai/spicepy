@@ -45,20 +45,46 @@ def wait_for_ready(
     return False
 
 
-# Skip cloud tests if TEST_SPICE_CLOUD is not set to true
+def cloud_api_key():
+    """The Spice.ai Cloud API key, or an empty string when none is available.
+
+    An empty value counts as absent, so an unusable key falls through to the next
+    source rather than being taken as the answer. `test.yml` passes the key as
+    `SPICE_API_KEY: ${{ secrets.SCP_SPICEAI_TPCH_API_KEY }}`, and a workflow run
+    that cannot read repository secrets - every pull request from a fork - renders
+    that expression as the empty string rather than leaving the variable unset.
+    """
+    return os.environ.get("SPICE_API_KEY") or os.environ.get("API_KEY") or ""
+
+
+# Skip cloud tests unless they are enabled and a credential is available to run them
 def skip_cloud():
-    skip = os.environ.get("TEST_SPICE_CLOUD") != "true"
-    return pytest.mark.skipif(
-        skip, reason="Cloud tests disabled (set TEST_SPICE_CLOUD=true)"
-    )
+    enabled = os.environ.get("TEST_SPICE_CLOUD") == "true"
+    has_key = bool(cloud_api_key())
+
+    # Name the requirement that is actually missing, so a skipped run says which
+    # of the two to fix instead of restating both every time.
+    if enabled and not has_key:
+        reason = (
+            "Cloud tests are enabled but no credential is available: set a "
+            "non-empty SPICE_API_KEY (or API_KEY)"
+        )
+    elif has_key and not enabled:
+        reason = "Cloud tests are disabled: set TEST_SPICE_CLOUD=true to run them"
+    else:
+        reason = (
+            "Cloud tests need TEST_SPICE_CLOUD=true and a non-empty "
+            "SPICE_API_KEY (or API_KEY); neither is set"
+        )
+
+    return pytest.mark.skipif(not (enabled and has_key), reason=reason)
 
 
 def get_cloud_client():
-    api_key = os.environ.get("SPICE_API_KEY", os.environ.get("API_KEY", ""))
     flight_url = os.environ.get(
         "SPICE_FLIGHT_URL", "grpc+tls://us-east-1-prod-aws-flight.spiceai.io"
     )
-    return Client(api_key=api_key, flight_url=flight_url)
+    return Client(api_key=cloud_api_key(), flight_url=flight_url)
 
 
 def get_local_client():

@@ -183,6 +183,106 @@ def exp(expr: Any) -> Expr:
     return _fn("EXP", expr)
 
 
+def log2(expr: Any) -> Expr:
+    return _fn("LOG2", expr)
+
+
+def log10(expr: Any) -> Expr:
+    return _fn("LOG10", expr)
+
+
+def cbrt(expr: Any) -> Expr:
+    return _fn("CBRT", expr)
+
+
+def trunc(expr: Any) -> Expr:
+    return _fn("TRUNC", expr)
+
+
+def signum(expr: Any) -> Expr:
+    return _fn("SIGNUM", expr)
+
+
+def pi() -> Expr:
+    return _Func("PI", [])
+
+
+def degrees(expr: Any) -> Expr:
+    return _fn("DEGREES", expr)
+
+
+def radians(expr: Any) -> Expr:
+    return _fn("RADIANS", expr)
+
+
+def gcd(a: Any, b: Any) -> Expr:
+    return _fn("GCD", a, b)
+
+
+def lcm(a: Any, b: Any) -> Expr:
+    return _fn("LCM", a, b)
+
+
+def factorial(expr: Any) -> Expr:
+    return _fn("FACTORIAL", expr)
+
+
+def nanvl(expr: Any, replacement: Any) -> Expr:
+    return _fn("NANVL", expr, replacement)
+
+
+def isnan(expr: Any) -> Expr:
+    return _fn("ISNAN", expr)
+
+
+def iszero(expr: Any) -> Expr:
+    return _fn("ISZERO", expr)
+
+
+def sin(expr: Any) -> Expr:
+    return _fn("SIN", expr)
+
+
+def cos(expr: Any) -> Expr:
+    return _fn("COS", expr)
+
+
+def tan(expr: Any) -> Expr:
+    return _fn("TAN", expr)
+
+
+def asin(expr: Any) -> Expr:
+    return _fn("ASIN", expr)
+
+
+def acos(expr: Any) -> Expr:
+    return _fn("ACOS", expr)
+
+
+def atan(expr: Any) -> Expr:
+    return _fn("ATAN", expr)
+
+
+def atan2(y: Any, x: Any) -> Expr:
+    return _fn("ATAN2", y, x)
+
+
+def sinh(expr: Any) -> Expr:
+    return _fn("SINH", expr)
+
+
+def cosh(expr: Any) -> Expr:
+    return _fn("COSH", expr)
+
+
+def tanh(expr: Any) -> Expr:
+    return _fn("TANH", expr)
+
+
+def cot(expr: Any) -> Expr:
+    return _fn("COT", expr)
+
+
 # --- strings ---
 
 
@@ -226,6 +326,86 @@ def starts_with(expr: Any, prefix: Any) -> Expr:
 
 def ends_with(expr: Any, suffix: Any) -> Expr:
     return _fn("ENDS_WITH", expr, suffix)
+
+
+def ltrim(expr: Any) -> Expr:
+    return _fn("LTRIM", expr)
+
+
+def rtrim(expr: Any) -> Expr:
+    return _fn("RTRIM", expr)
+
+
+def btrim(expr: Any) -> Expr:
+    return _fn("BTRIM", expr)
+
+
+def lpad(expr: Any, length: Any, fill: Any = None) -> Expr:
+    if fill is None:
+        return _fn("LPAD", expr, length)
+    return _fn("LPAD", expr, length, fill)
+
+
+def rpad(expr: Any, length: Any, fill: Any = None) -> Expr:
+    if fill is None:
+        return _fn("RPAD", expr, length)
+    return _fn("RPAD", expr, length, fill)
+
+
+def initcap(expr: Any) -> Expr:
+    return _fn("INITCAP", expr)
+
+
+def left(expr: Any, n: Any) -> Expr:
+    return _fn("LEFT", expr, n)
+
+
+def right(expr: Any, n: Any) -> Expr:
+    return _fn("RIGHT", expr, n)
+
+
+def reverse(expr: Any) -> Expr:
+    return _fn("REVERSE", expr)
+
+
+def repeat(expr: Any, n: Any) -> Expr:
+    return _fn("REPEAT", expr, n)
+
+
+def translate(expr: Any, from_chars: Any, to_chars: Any) -> Expr:
+    return _fn("TRANSLATE", expr, from_chars, to_chars)
+
+
+def concat_ws(separator: Any, *exprs: Any) -> Expr:
+    return _fn("CONCAT_WS", separator, *exprs)
+
+
+def split_part(expr: Any, delimiter: Any, n: Any) -> Expr:
+    return _fn("SPLIT_PART", expr, delimiter, n)
+
+
+def strpos(expr: Any, substring: Any) -> Expr:
+    return _fn("STRPOS", expr, substring)
+
+
+def regexp_replace(
+    expr: Any, pattern: Any, replacement: Any, flags: Any = None
+) -> Expr:
+    if flags is None:
+        return _fn("REGEXP_REPLACE", expr, pattern, replacement)
+    return _fn("REGEXP_REPLACE", expr, pattern, replacement, flags)
+
+
+def ascii(expr: Any) -> Expr:
+    return _fn("ASCII", expr)
+
+
+def chr(code: Any) -> Expr:
+    return _fn("CHR", code)
+
+
+def to_hex(expr: Any) -> Expr:
+    return _fn("TO_HEX", expr)
 
 
 # --- date/time ---
@@ -274,6 +454,30 @@ def date_bin(stride: Any, source: Any, origin: Any = None) -> Expr:
     return _Func("DATE_BIN", args)
 
 
+def to_timestamp(expr: Any, *formats: Any) -> Expr:
+    return _fn("TO_TIMESTAMP", expr, *formats)
+
+
+def to_date(expr: Any, *formats: Any) -> Expr:
+    return _fn("TO_DATE", expr, *formats)
+
+
+def from_unixtime(expr: Any) -> Expr:
+    return _fn("FROM_UNIXTIME", expr)
+
+
+def to_unixtime(expr: Any) -> Expr:
+    return _fn("TO_UNIXTIME", expr)
+
+
+def make_date(year: Any, month: Any, day: Any) -> Expr:
+    return _fn("MAKE_DATE", year, month, day)
+
+
+def to_char(expr: Any, fmt: Any) -> Expr:
+    return _fn("TO_CHAR", expr, fmt)
+
+
 # --- null / control flow ---
 
 
@@ -289,6 +493,11 @@ def nullif(a: Any, b: Any) -> Expr:
 
 def ifnull(expr: Any, default: Any) -> Expr:
     return coalesce(expr, default)
+
+
+def nvl(expr: Any, default: Any) -> Expr:
+    """Return ``expr`` if not null, else ``default`` (like ``coalesce`` of two)."""
+    return _fn("NVL", expr, default)
 
 
 def greatest(*exprs: Any) -> Expr:
