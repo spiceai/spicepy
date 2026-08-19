@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+import gc
 import os
 from pathlib import Path
 import threading
@@ -433,6 +435,150 @@ class TestADBCClient:
         mock_db.close.assert_called_once()
         assert client._db is None
         assert client._conn is None
+
+
+class TestADBCClientStreaming:
+    """_ADBCClient.query_with_params must stream, not buffer the whole result."""
+
+    SCHEMA = pa.schema([pa.field("a", pa.int64())])
+
+    @staticmethod
+    def _adbc_client(mock_manager: MagicMock, mock_flightsql: MagicMock) -> _ADBCClient:
+        mock_flightsql.connect.return_value = MagicMock()
+        mock_manager.AdbcConnection.return_value = MagicMock()
+        return _ADBCClient("grpc://localhost:50051")
+
+    @classmethod
+    def _source(cls, pulled: list[int], count: int = 3) -> pa.RecordBatchReader:
+        """A reader that records each batch as it is pulled off the wire."""
+
+        def batches() -> Iterator[pa.RecordBatch]:
+            for i in range(count):
+                pulled.append(i)
+                yield pa.record_batch(
+                    [pa.array([i], type=pa.int64())], schema=cls.SCHEMA
+                )
+
+        return pa.RecordBatchReader.from_batches(cls.SCHEMA, batches())
+
+    @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
+    @patch("spicepy._client.adbc_driver_flightsql")
+    @patch("spicepy._client.adbc_driver_manager")
+    def test_query_with_params_does_not_buffer_result(
+        self,
+        mock_manager: MagicMock,
+        mock_flightsql: MagicMock,
+    ) -> None:
+        """Returning the reader must not drain the result stream first."""
+        client = self._adbc_client(mock_manager, mock_flightsql)
+        pulled: list[int] = []
+        stmt = MagicMock()
+        # A real reader stands in for the ADBC result handle; from_stream()
+        # consumes it lazily through the Arrow C stream interface.
+        stmt.execute_query.return_value = (self._source(pulled), None)
+        mock_manager.AdbcStatement.return_value = stmt
+
+        reader = client.query_with_params("SELECT * FROM t WHERE a = $1", [])
+
+        # The whole result must not have been read just to hand back a reader.
+        assert pulled != [0, 1, 2], "result was buffered instead of streamed"
+        # The statement owns the stream, so it stays open while the caller reads.
+        stmt.close.assert_not_called()
+
+        reader.read_next_batch()
+        assert pulled == [0]
+        stmt.close.assert_not_called()
+
+    @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
+    @patch("spicepy._client.adbc_driver_flightsql")
+    @patch("spicepy._client.adbc_driver_manager")
+    def test_query_with_params_yields_all_batches_and_closes_statement(
+        self,
+        mock_manager: MagicMock,
+        mock_flightsql: MagicMock,
+    ) -> None:
+        """Draining the reader yields every batch, then releases the statement."""
+        client = self._adbc_client(mock_manager, mock_flightsql)
+        pulled: list[int] = []
+        stmt = MagicMock()
+        # A real reader stands in for the ADBC result handle; from_stream()
+        # consumes it lazily through the Arrow C stream interface.
+        stmt.execute_query.return_value = (self._source(pulled), None)
+        mock_manager.AdbcStatement.return_value = stmt
+
+        reader = client.query_with_params("SELECT * FROM t WHERE a = $1", [])
+
+        table = reader.read_all()
+
+        assert table.num_rows == 3
+        assert table.column("a").to_pylist() == [0, 1, 2]
+        assert pulled == [0, 1, 2]
+        stmt.close.assert_called_once()
+
+    @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
+    @patch("spicepy._client.adbc_driver_flightsql")
+    @patch("spicepy._client.adbc_driver_manager")
+    def test_query_with_params_closes_statement_on_error(
+        self,
+        mock_manager: MagicMock,
+        mock_flightsql: MagicMock,
+    ) -> None:
+        """A failure before the stream exists must still release the statement."""
+        client = self._adbc_client(mock_manager, mock_flightsql)
+        stmt = MagicMock()
+        stmt.execute_query.side_effect = RuntimeError("boom")
+        mock_manager.AdbcStatement.return_value = stmt
+
+        with pytest.raises(RuntimeError, match="boom"):
+            client.query_with_params("SELECT * FROM t WHERE a = $1", [])
+
+        stmt.close.assert_called_once()
+
+    @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
+    @patch("spicepy._client.adbc_driver_flightsql")
+    @patch("spicepy._client.adbc_driver_manager")
+    def test_query_with_params_closes_statement_when_abandoned(
+        self,
+        mock_manager: MagicMock,
+        mock_flightsql: MagicMock,
+    ) -> None:
+        """Closing the reader early must not leak the statement."""
+        client = self._adbc_client(mock_manager, mock_flightsql)
+        pulled: list[int] = []
+        stmt = MagicMock()
+        # A real reader stands in for the ADBC result handle; from_stream()
+        # consumes it lazily through the Arrow C stream interface.
+        stmt.execute_query.return_value = (self._source(pulled), None)
+        mock_manager.AdbcStatement.return_value = stmt
+
+        reader = client.query_with_params("SELECT * FROM t WHERE a = $1", [])
+
+        reader.read_next_batch()
+        reader.close()
+        del reader
+        gc.collect()
+
+        stmt.close.assert_called_once()
+
+    def test_statement_is_released_even_if_reader_close_raises(self) -> None:
+        """A failing reader.close() must not leak the statement."""
+        from spicepy._client import _stream_until_closed
+
+        class FailingCloseReader:
+            schema = TestADBCClientStreaming.SCHEMA
+
+            def __iter__(self) -> Iterator[pa.RecordBatch]:
+                return iter(())
+
+            def close(self) -> None:
+                raise OSError("close failed")
+
+        stmt = MagicMock()
+
+        with pytest.raises(OSError, match="close failed"):
+            _stream_until_closed(FailingCloseReader(), stmt).read_all()
+
+        stmt.close.assert_called_once()
 
 
 class TestADBCClientCreateParamBatch:
@@ -1454,6 +1600,34 @@ class TestClientBatchesAndPydict:
         client = Client()
         batches = list(client.query_batches("SELECT 1"))
         assert batches == [batch1, batch2]
+
+    @patch("spicepy._client._SpiceFlight")
+    @patch("spicepy._client._Cert")
+    @patch("spicepy._client._ADBCClient")
+    def test_query_batches_with_params_streams(
+        self,
+        mock_adbc_class: MagicMock,
+        mock_cert_class: MagicMock,
+        mock_flight_class: MagicMock,
+    ) -> None:
+        """Parameterized batch streaming goes through the ADBC reader."""
+        mock_cert = MagicMock()
+        mock_cert.tls_root_certs = b"cert"
+        mock_cert_class.return_value = mock_cert
+
+        batch1 = pa.record_batch({"x": [1, 2]})
+        batch2 = pa.record_batch({"x": [3, 4]})
+        mock_adbc = MagicMock()
+        mock_adbc.query_with_params.return_value = iter([batch1, batch2])
+        mock_adbc_class.return_value = mock_adbc
+
+        client = Client()
+        batches = list(client.query_batches("SELECT * FROM t WHERE x > $1", params=[0]))
+
+        assert batches == [batch1, batch2]
+        mock_adbc.query_with_params.assert_called_once_with(
+            "SELECT * FROM t WHERE x > $1", [0]
+        )
 
 
 class TestClientDataFrameEntry:

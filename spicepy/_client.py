@@ -71,6 +71,30 @@ except (ImportError, ModuleNotFoundError):
 DEFAULT_QUERY_TIMEOUT_SECS = 10 * 60
 
 
+def _stream_until_closed(
+    reader: pa.RecordBatchReader,
+    stmt: Any,
+) -> pa.RecordBatchReader:
+    """Return a reader that streams ``reader`` and closes ``stmt`` when done.
+
+    The ADBC statement owns the result stream, so it must stay open for as long
+    as the caller is reading. It is released when the stream is exhausted, or
+    when the returned reader is closed or garbage collected.
+    """
+    schema = reader.schema
+
+    def batches() -> Iterator[pa.RecordBatch]:
+        try:
+            yield from reader
+        finally:
+            try:
+                reader.close()
+            finally:
+                stmt.close()
+
+    return pa.RecordBatchReader.from_batches(schema, batches())
+
+
 class _ADBCClient:
     """ADBC client for parameterized queries using FlightSQL."""
 
@@ -174,7 +198,9 @@ class _ADBCClient:
                 - A tuple of (value, pyarrow.DataType) for explicit type control
 
         Returns:
-            Arrow RecordBatchReader with query results
+            Arrow RecordBatchReader that streams query results. Batches are
+            fetched from the server as they are consumed, so the full result
+            is never held in memory unless the caller materializes it.
         """
         # Create a new statement
         stmt = adbc_driver_manager.AdbcStatement(self._conn)
@@ -195,14 +221,16 @@ class _ADBCClient:
 
             # Execute and get results
             handle, _ = stmt.execute_query()
-
-            # Read results into Arrow table using from_stream
             reader = pa.RecordBatchReader.from_stream(handle)
-            # Consume reader into table, then return a new reader
-            table = reader.read_all()
-            return table.to_reader()
-        finally:
+        except BaseException:
             stmt.close()
+            raise
+
+        # The statement has to outlive the result stream, so it is closed once
+        # the stream is drained (or when the caller closes/abandons the reader)
+        # instead of here. Closing it up front would force the whole result to
+        # be buffered before this call could return.
+        return _stream_until_closed(reader, stmt)
 
     def close(self):
         """Close the ADBC connection."""
@@ -579,13 +607,20 @@ class Client:
         self,
         sql: str,
         *,
+        params: list[Any] | None = None,
         timeout: int | None = None,
     ) -> Iterator[pa.RecordBatch]:
         """Execute a SQL query and yield Arrow RecordBatches as they stream in.
 
         Unlike :meth:`query_arrow`, this does not materialize the full result
-        in memory before returning.
+        in memory before returning, which makes it the right choice for result
+        sets too large to hold in memory.
+
+        See :meth:`query_arrow` for argument semantics.
         """
+        if params is not None:
+            yield from self.query_with_params(sql, params)
+            return
         kwargs: dict[str, Any] = {}
         if timeout is not None:
             kwargs["timeout"] = timeout
