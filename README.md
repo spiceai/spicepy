@@ -13,13 +13,13 @@ Spice.ai client library for Python.
 ## Installation
 
 ```bash
-pip install git+https://github.com/spiceai/spicepy@v3.1.0
+pip install git+https://github.com/spiceai/spicepy@v3.2.0
 ```
 
 For parameterized query support, install with the optional `params` extra:
 
 ```bash
-pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v3.1.0"
+pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v3.2.0"
 ```
 
 ## Usage
