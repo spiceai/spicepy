@@ -28,7 +28,7 @@ assignees: ''
 - [ ] Test the [`spicepy` sample](https://github.com/spiceai/samples/tree/trunk/client-sdk/spicepy-sdk-sample) using the latest `trunk` SDK version.
 - [ ] Update [release notes](https://github.com/spiceai/spicepy/blob/trunk/docs/release_notes)
   - [ ] Ensure any external contributors have been acknowledged.
-- [ ] Verify the version in `setup.py` is correct and match the milestone version.
+- [ ] Verify the version in `pyproject.toml` is correct and match the milestone version.
 - [ ] Run [Test CI](https://github.com/spiceai/spicepy/actions/workflows/test.yml) and ensure it is green on the trunk branch.
 - [ ] QA DRI sign-off
 - [ ] Docs DRI sign-off
@@ -36,5 +36,5 @@ assignees: ''
 - [ ] Release the new version by creating and publishing a latest [GitHub Release](https://github.com/spiceai/spicepy/releases/new) with the tag from the release branch. E.g. `v0.17.0-beta`.
 - [ ] Run a test pass using the [`spicepy` sample](https://github.com/spiceai/samples/tree/trunk/client-sdk/spicepy-sdk-sample) using the latest published version.
 - [ ] No package publish is required as we don't currently publish this to PyPI.
-- [ ] Update the version in `setup.py` to the next release version.
+- [ ] Update the version in `pyproject.toml` to the next release version.
 - [ ] The SDK release is added to the next [Spice release notes](https://github.com/spiceai/spiceai/tree/trunk/docs/release_notes)

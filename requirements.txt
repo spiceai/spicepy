@@ -1,4 +1,0 @@
-pyarrow>=25.0.1
-pandas>=3.0.5
-certifi>=2026.7.22
-requests>=2.34.2

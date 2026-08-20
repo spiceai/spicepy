@@ -2,8 +2,16 @@ from importlib.metadata import version
 import os
 import platform
 
-DEFAULT_FLIGHT_URL = os.environ.get("SPICE_FLIGHT_URL", "grpc+tls://flight.spiceai.io")
-DEFAULT_HTTP_URL = os.environ.get("SPICE_HTTP_URL", "https://data.spiceai.io")
+# Cloud endpoints are region-specific. Replace `us-east-1` with the region of
+# your Spice.ai Cloud app (e.g. `us-east-1`, `us-west-2`, `eu-west-1`).
+# The legacy region-agnostic hostnames (`flight.spiceai.io`, `data.spiceai.io`)
+# are no longer valid.
+DEFAULT_FLIGHT_URL = os.environ.get(
+    "SPICE_FLIGHT_URL", "grpc+tls://us-east-1-prod-aws-flight.spiceai.io"
+)
+DEFAULT_HTTP_URL = os.environ.get(
+    "SPICE_HTTP_URL", "https://us-east-1-prod-aws-data.spiceai.io"
+)
 
 DEFAULT_LOCAL_FLIGHT_URL = os.environ.get(
     "SPICE_LOCAL_FLIGHT_URL", "grpc://localhost:50051"

@@ -17,7 +17,7 @@ To develop locally:
    git checkout -b MY_BRANCH_NAME
    ```
 
-3. Install a recent version of Python (3.8+)
+3. Install a recent version of Python (3.11+)
 
 4. Install the dependencies with:
 

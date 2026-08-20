@@ -374,7 +374,7 @@ class Client:
         self,
         api_key: str | None = None,
         flight_url: str = config.DEFAULT_LOCAL_FLIGHT_URL,
-        http_url: str = config.DEFAULT_HTTP_URL,
+        http_url: str = config.DEFAULT_LOCAL_HTTP_URL,
         tls_root_cert: str | Path | None = None,
         user_agent: str | None = None,
         tls_client_certificate: str | Path | None = None,

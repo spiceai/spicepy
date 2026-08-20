@@ -81,7 +81,10 @@ def skip_cloud():
 
 
 def get_cloud_client():
-    return Client(api_key=cloud_api_key(), flight_url="grpc+tls://flight.spiceai.io")
+    flight_url = os.environ.get(
+        "SPICE_FLIGHT_URL", "grpc+tls://us-east-1-prod-aws-flight.spiceai.io"
+    )
+    return Client(api_key=cloud_api_key(), flight_url=flight_url)
 
 
 def get_local_client():
