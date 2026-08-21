@@ -7,6 +7,14 @@ Spice.ai client library.
 # flake8: noqa
 from . import functions
 from ._active_query import ActiveQuery
+from ._async_query import (
+    ListQueriesResult,
+    QueryJob,
+    QueryJobError,
+    QueryResult,
+    QueryStatus,
+    QuerySummary,
+)
 from ._client import Client
 from ._dataframe import SpiceDataFrame
 from ._expr import Expr, WindowFrame, case, col, lit
@@ -21,8 +29,14 @@ __all__ = [
     "ComponentStatus",
     "ConnectionDetails",
     "Expr",
+    "ListQueriesResult",
     "NsqlField",
     "NsqlResult",
+    "QueryJob",
+    "QueryJobError",
+    "QueryResult",
+    "QueryStatus",
+    "QuerySummary",
     "RefreshOpts",
     "SearchMatch",
     "SearchResult",

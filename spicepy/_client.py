@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
 
+    from ._async_query import ListQueriesResult, QueryJob
     from ._dataframe import SpiceDataFrame
 
 # pylint: disable=E0611
@@ -443,8 +444,8 @@ class Client:
             )
         return self._adbc_client
 
-    def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
-        """Execute a SQL query against Spice.
+    def sql(self, query: str, **kwargs) -> flight.FlightStreamReader:
+        """Execute a SQL query against Spice, synchronously.
 
         Args:
             query: SQL query string
@@ -456,12 +457,12 @@ class Client:
         """
         return self._flight.query(query, **kwargs)
 
-    def query_with_params(
+    def sql_with_params(
         self,
         sql: str,
         params: list[Any],
     ) -> pa.RecordBatchReader:
-        """Execute a parameterized SQL query using ADBC.
+        """Execute a parameterized SQL query using ADBC, synchronously.
 
         This method is recommended for queries with user input to prevent SQL injection.
         Parameters should use positional placeholders ($1, $2, etc.) in the SQL query.
@@ -472,14 +473,14 @@ class Client:
 
         Example:
             # With automatic type inference
-            reader = client.query_with_params(
+            reader = client.sql_with_params(
                 "SELECT * FROM table WHERE id = $1 AND name = $2",
                 [123, "test"]
             )
 
             # With explicit PyArrow types
             import pyarrow as pa
-            reader = client.query_with_params(
+            reader = client.sql_with_params(
                 "SELECT * FROM table WHERE id = $1 AND amount = $2",
                 [(123, pa.int32()), (99.99, pa.float64())]
             )
@@ -503,6 +504,76 @@ class Client:
         adbc = self._ensure_adbc_client()
         return adbc.query_with_params(sql, params)
 
+    def query(self, query: str, **kwargs: Any) -> "QueryJob":
+        """Submit a SQL query for asynchronous execution.
+
+        Unlike :meth:`sql`, this does not stream results back directly. Instead
+        the runtime queues the query and returns immediately with a
+        :class:`~spicepy._async_query.QueryJob` handle used to poll status and
+        fetch results once it completes. Requires the runtime to be running in
+        distributed/scheduler mode (``spiced --role scheduler`` with
+        ``runtime.scheduler.state_location`` configured), and requires
+        ``http_url`` to be configured on this client.
+
+        Use :meth:`sql` for the synchronous, streaming behavior this method had
+        before v4.0.0.
+
+        Example:
+            job = client.query("SELECT * FROM large_table")
+            job.wait()
+            result = job.results()
+            for row in result:
+                print(row)
+
+        Args:
+            query: SQL query string.
+            **kwargs: Reserved for future use.
+
+        Returns:
+            A :class:`~spicepy._async_query.QueryJob` handle.
+
+        Raises:
+            ValueError: If ``query`` is empty.
+            SpiceAIError: If the runtime rejects the request or is unreachable.
+        """
+        del kwargs
+        from ._async_query import submit_query
+
+        return submit_query(self, query, parameters=None)
+
+    def query_with_params(
+        self,
+        sql: str,
+        params: list[Any],
+    ) -> "QueryJob":
+        """Submit a parameterized SQL query for asynchronous execution.
+
+        See :meth:`query` for the async job lifecycle. Use :meth:`sql_with_params`
+        for the synchronous, streaming behavior this method had before v4.0.0.
+
+        Args:
+            sql: SQL query with positional placeholders ($1, $2, etc.)
+            params: List of parameter values. Unlike :meth:`sql_with_params`, these
+                must be JSON-encodable values (str, int, float, bool, None, or
+                nested lists/dicts of those) — the ``(value, pa.DataType)`` tuple
+                form is not supported here, since the runtime binds these over
+                HTTP as plain JSON, not Arrow.
+
+        Returns:
+            A :class:`~spicepy._async_query.QueryJob` handle.
+
+        Raises:
+            ValueError: If ``params`` is ``None``.
+            SpiceAIError: If the runtime rejects the request or is unreachable.
+        """
+        if params is None:
+            raise ValueError(
+                "params must be a list, not None. Use [] for queries without parameters."
+            )
+        from ._async_query import submit_query
+
+        return submit_query(self, sql, parameters=params)
+
     def _read_table(
         self,
         sql: str,
@@ -510,11 +581,11 @@ class Client:
         timeout: int | None,
     ) -> pa.Table:
         if params is not None:
-            return self.query_with_params(sql, params).read_all()
+            return self.sql_with_params(sql, params).read_all()
         kwargs: dict[str, Any] = {}
         if timeout is not None:
             kwargs["timeout"] = timeout
-        return self.query(sql, **kwargs).read_all()
+        return self.sql(sql, **kwargs).read_all()
 
     def query_arrow(
         self,
@@ -529,7 +600,7 @@ class Client:
             sql: SQL query string. Use $1, $2, ... placeholders if passing params.
             params: Optional list of parameter values. When provided, the query is
                 executed via ADBC FlightSQL with prepared statements. See
-                :meth:`query_with_params` for parameter format.
+                :meth:`sql_with_params` for parameter format.
             timeout: Optional query timeout in seconds (ignored when params is set).
 
         Returns:
@@ -619,12 +690,12 @@ class Client:
         See :meth:`query_arrow` for argument semantics.
         """
         if params is not None:
-            yield from self.query_with_params(sql, params)
+            yield from self.sql_with_params(sql, params)
             return
         kwargs: dict[str, Any] = {}
         if timeout is not None:
             kwargs["timeout"] = timeout
-        reader = self.query(sql, **kwargs)
+        reader = self.sql(sql, **kwargs)
         for chunk in reader:
             # FlightStreamReader yields FlightStreamChunk; pa.RecordBatchReader yields RecordBatch.
             batch = getattr(chunk, "data", chunk)
@@ -685,7 +756,7 @@ class Client:
 
     def get_schema(self, sql: str) -> pa.Schema:
         """Return the Arrow schema of a query without materializing rows."""
-        return self.query(f"SELECT * FROM ({sql}) LIMIT 0").read_all().schema
+        return self.sql(f"SELECT * FROM ({sql}) LIMIT 0").read_all().schema
 
     def explain(
         self,
@@ -716,7 +787,7 @@ class Client:
         """Stream the result of ``sql`` to a Parquet file at ``path``."""
         import pyarrow.parquet as pq
 
-        reader = self.query(sql)
+        reader = self.sql(sql)
         with pq.ParquetWriter(path, reader.schema, **kwargs) as writer:
             for chunk in reader:
                 batch = getattr(chunk, "data", chunk)
@@ -727,7 +798,7 @@ class Client:
         """Stream the result of ``sql`` to a CSV file at ``path``."""
         import pyarrow.csv as pa_csv
 
-        reader = self.query(sql)
+        reader = self.sql(sql)
         with pa_csv.CSVWriter(path, reader.schema, **kwargs) as writer:
             for chunk in reader:
                 batch = getattr(chunk, "data", chunk)
@@ -755,7 +826,7 @@ class Client:
 
         return SpiceDataFrame(self, f"SELECT * FROM {quote_ident(name)}")
 
-    def sql(self, query: str) -> "SpiceDataFrame":
+    def from_sql(self, query: str) -> "SpiceDataFrame":
         """Return a lazy DataFrame wrapping an arbitrary SQL query."""
         from ._dataframe import SpiceDataFrame
 
@@ -829,8 +900,9 @@ class Client:
         """Return the synchronous queries running in the caller's scope.
 
         Backed by ``GET /v1/sql/active``. Synchronous queries are the ones started by
-        :meth:`query`, :meth:`query_with_params`, FlightSQL, NSQL and search — not
-        async query jobs, which the runtime only serves in cluster mode.
+        :meth:`sql`, :meth:`sql_with_params`, FlightSQL, NSQL and search — not
+        async query jobs, which the runtime only serves in cluster mode. Async query
+        jobs (started by :meth:`query`/:meth:`query_with_params`) are listed separately.
 
         The runtime does not return a query's id to the client that submitted it, so
         this is how to find the id that :meth:`cancel_active_query` needs.
@@ -1092,7 +1164,7 @@ class Client:
         """Translate ``query`` into SQL without running it.
 
         Use it to inspect or edit the query before running it, or to run it
-        through :meth:`query` so results arrive as Arrow rather than decoded
+        through :meth:`sql` so results arrive as Arrow rather than decoded
         JSON.
 
         Takes the same arguments as :meth:`nsql` and raises the same errors.
@@ -1108,6 +1180,27 @@ class Client:
             prompt_cache_key=prompt_cache_key,
         )
         return self.http.post_text(NSQL_PATH, body, NSQL_SQL_MEDIA_TYPE)
+
+    # ------------------------------------------------------------------
+    # Async query jobs
+    # ------------------------------------------------------------------
+
+    def list_queries(
+        self, status: str | None = None, limit: int | None = None
+    ) -> "ListQueriesResult":
+        """Return a summary of async query jobs known to the runtime.
+
+        Backed by ``GET /v1/queries``. Distinct from :meth:`list_active_queries`,
+        which lists synchronous queries.
+
+        Args:
+            status: Filter by status (``PENDING``, ``RUNNING``, ``SUCCEEDED``,
+                ``FAILED``, ``CANCELLED``, ``CLOSED``).
+            limit: Maximum number of results.
+        """
+        from ._async_query import list_queries as _list_queries
+
+        return _list_queries(self, status=status, limit=limit)
 
 
 class _ArrowFlightCallThread(threading.Thread):

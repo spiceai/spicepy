@@ -29,7 +29,7 @@ def df(client: MagicMock) -> SpiceDataFrame:
 
 def mock_schema(client: MagicMock, *names: str) -> None:
     """Serve *names as the schema of the mocked zero-row probe query."""
-    client.query.return_value.read_all.return_value.schema = pa.schema(
+    client.sql.return_value.read_all.return_value.schema = pa.schema(
         [pa.field(n, pa.int64()) for n in names]
     )
 
@@ -261,7 +261,7 @@ class TestMaterialization:
         sample = pa.table({"a": [1]}, schema=pa.schema([("a", pa.int64())]))
         reader = MagicMock()
         reader.read_all.return_value = sample
-        client.query.return_value = reader
+        client.sql.return_value = reader
         result = df.schema()
         assert result == sample.schema
 
@@ -421,7 +421,7 @@ class TestDescribe:
     def _mock_schema(client: MagicMock, schema: pa.Schema) -> None:
         reader = MagicMock()
         reader.read_all.return_value.schema = schema
-        client.query.return_value = reader
+        client.sql.return_value = reader
 
     def test_describe_numeric(self, df: SpiceDataFrame, client: MagicMock) -> None:
         self._mock_schema(

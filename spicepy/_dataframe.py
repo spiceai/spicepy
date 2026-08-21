@@ -343,7 +343,7 @@ class SpiceDataFrame:
 
     def schema(self) -> pa.Schema:
         """Return the Arrow schema of this DataFrame (executes ``LIMIT 0``)."""
-        reader = self._client.query(f"SELECT * FROM {self._from()} LIMIT 0")
+        reader = self._client.sql(f"SELECT * FROM {self._from()} LIMIT 0")
         return reader.read_all().schema
 
     def describe(self) -> SpiceDataFrame:
@@ -390,7 +390,7 @@ class SpiceDataFrame:
             prefix += " ANALYZE"
         if verbose:
             prefix += " VERBOSE"
-        table = self._client.query(f"{prefix} {self._sql}").read_all()
+        table = self._client.sql(f"{prefix} {self._sql}").read_all()
         rows = table.to_pylist()
         return "\n".join(
             (row.get("plan") or row.get("plan_type") or str(row)) for row in rows
