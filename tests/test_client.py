@@ -254,7 +254,7 @@ class TestClientGetAdbcUri:
 
 
 class TestClientQueryWithParams:
-    """Test Client.query_with_params method."""
+    """Test Client.sql_with_params method."""
 
     @patch("spicepy._client._SpiceFlight")
     @patch("spicepy._client._Cert")
@@ -263,7 +263,7 @@ class TestClientQueryWithParams:
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query_with_params raises ValueError when params is None."""
+        """Test sql_with_params raises ValueError when params is None."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -271,7 +271,7 @@ class TestClientQueryWithParams:
         client = Client()
 
         with pytest.raises(ValueError, match="params must be a list"):
-            client.query_with_params("SELECT 1", None)  # type: ignore
+            client.sql_with_params("SELECT 1", None)  # type: ignore
 
     @patch("spicepy._client._SpiceFlight")
     @patch("spicepy._client._Cert")
@@ -282,7 +282,7 @@ class TestClientQueryWithParams:
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query_with_params creates ADBC client on first call."""
+        """Test sql_with_params creates ADBC client on first call."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -293,7 +293,7 @@ class TestClientQueryWithParams:
         mock_adbc_class.return_value = mock_adbc
 
         client = Client()
-        client.query_with_params("SELECT 1", [])
+        client.sql_with_params("SELECT 1", [])
 
         mock_adbc_class.assert_called_once()
 
@@ -306,7 +306,7 @@ class TestClientQueryWithParams:
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query_with_params reuses ADBC client on subsequent calls."""
+        """Test sql_with_params reuses ADBC client on subsequent calls."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -317,8 +317,8 @@ class TestClientQueryWithParams:
         mock_adbc_class.return_value = mock_adbc
 
         client = Client()
-        client.query_with_params("SELECT 1", [])
-        client.query_with_params("SELECT 2", [])
+        client.sql_with_params("SELECT 1", [])
+        client.sql_with_params("SELECT 2", [])
 
         # Should only create client once
         assert mock_adbc_class.call_count == 1
@@ -332,7 +332,7 @@ class TestClientQueryWithParams:
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query_with_params passes SQL and params to ADBC client."""
+        """Test sql_with_params passes SQL and params to ADBC client."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -343,7 +343,7 @@ class TestClientQueryWithParams:
         mock_adbc_class.return_value = mock_adbc
 
         client = Client(flight_url="grpc://localhost:50051", api_key="test-key")
-        result = client.query_with_params("SELECT * FROM t WHERE id = $1", [42])
+        result = client.sql_with_params("SELECT * FROM t WHERE id = $1", [42])
 
         mock_adbc.query_with_params.assert_called_once_with(
             "SELECT * FROM t WHERE id = $1", [42]
@@ -369,7 +369,7 @@ class TestClientQueryWithParams:
         mock_adbc_class.return_value = mock_adbc
 
         client = Client(flight_url="grpc://localhost:50051", user_agent="custom-agent")
-        client.query_with_params("SELECT 1", [])
+        client.sql_with_params("SELECT 1", [])
 
         mock_adbc_class.assert_called_once_with(
             uri="grpc://localhost:50051",
@@ -680,17 +680,17 @@ class TestADBCClientCreateParamBatch:
         assert batch.schema.field(1).type == pa.float32()  # Explicit
 
 
-class TestClientQuery:
-    """Test Client.query method."""
+class TestClientSql:
+    """Test Client.sql method."""
 
     @patch("spicepy._client._SpiceFlight")
     @patch("spicepy._client._Cert")
-    def test_query_delegates_to_flight(
+    def test_sql_delegates_to_flight(
         self,
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query delegates to _SpiceFlight."""
+        """Test sql delegates to _SpiceFlight."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -701,19 +701,19 @@ class TestClientQuery:
         mock_flight_class.return_value = mock_flight
 
         client = Client()
-        result = client.query("SELECT 1")
+        result = client.sql("SELECT 1")
 
         assert result == mock_reader
         mock_flight.query.assert_called_once_with("SELECT 1")
 
     @patch("spicepy._client._SpiceFlight")
     @patch("spicepy._client._Cert")
-    def test_query_with_timeout(
+    def test_sql_with_timeout(
         self,
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query with timeout parameter."""
+        """Test sql with timeout parameter."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -722,7 +722,7 @@ class TestClientQuery:
         mock_flight_class.return_value = mock_flight
 
         client = Client()
-        client.query("SELECT 1", timeout=60)
+        client.sql("SELECT 1", timeout=60)
 
         mock_flight.query.assert_called_once_with("SELECT 1", timeout=60)
 
@@ -810,12 +810,12 @@ class TestEdgeCases:
 
     @patch("spicepy._client._SpiceFlight")
     @patch("spicepy._client._Cert")
-    def test_query_with_params_empty_list(
+    def test_sql_with_params_empty_list(
         self,
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
     ) -> None:
-        """Test query_with_params with empty list."""
+        """Test sql_with_params with empty list."""
         mock_cert = MagicMock()
         mock_cert.tls_root_certs = b"cert"
         mock_cert_class.return_value = mock_cert
@@ -826,7 +826,7 @@ class TestEdgeCases:
             mock_adbc_class.return_value = mock_adbc
 
             client = Client()
-            client.query_with_params("SELECT 1", [])
+            client.sql_with_params("SELECT 1", [])
 
             mock_adbc.query_with_params.assert_called_once_with("SELECT 1", [])
 
@@ -1651,7 +1651,7 @@ class TestClientDataFrameEntry:
 
     @patch("spicepy._client._SpiceFlight")
     @patch("spicepy._client._Cert")
-    def test_sql_returns_dataframe(
+    def test_from_sql_returns_dataframe(
         self,
         mock_cert_class: MagicMock,
         mock_flight_class: MagicMock,
@@ -1663,7 +1663,7 @@ class TestClientDataFrameEntry:
         mock_cert_class.return_value = mock_cert
 
         client = Client()
-        df = client.sql("SELECT 1")
+        df = client.from_sql("SELECT 1")
         assert isinstance(df, SpiceDataFrame)
         assert df.to_sql() == "SELECT 1"
 

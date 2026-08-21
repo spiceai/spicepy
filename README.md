@@ -66,10 +66,10 @@ client = Client(
 
 ### Run a SQL query
 
-The low-level `query()` method returns a `pyarrow.flight.FlightStreamReader` you can stream or materialize.
+The low-level `sql()` method returns a `pyarrow.flight.FlightStreamReader` you can stream or materialize.
 
 ```python
-data = client.query(
+data = client.sql(
     "SELECT trip_distance, total_amount FROM taxi_trips "
     "ORDER BY trip_distance DESC LIMIT 10",
     timeout=5 * 60,
@@ -102,7 +102,7 @@ All helpers (except `query_batches`) accept `timeout=` and `params=` — see bel
 
 ### Parameterized queries (recommended for user input)
 
-Parameterized queries prevent SQL injection and let the engine reuse plans. Use positional placeholders (`$1`, `$2`, …) and pass values via `params=` or `query_with_params()`.
+Parameterized queries prevent SQL injection and let the engine reuse plans. Use positional placeholders (`$1`, `$2`, …) and pass values via `params=` or `sql_with_params()`.
 
 ```python
 # Inferred types via the typed helpers
@@ -112,7 +112,7 @@ table = client.query_arrow(
 )
 
 # Multiple parameters, streaming reader
-reader = client.query_with_params(
+reader = client.sql_with_params(
     "SELECT * FROM taxi_trips WHERE trip_distance > $1 AND fare_amount > $2 LIMIT 10",
     [5.0, 20.0],
 )
@@ -120,12 +120,12 @@ for batch in reader:
     print(batch.to_pandas())
 
 # Query without parameters (pass an empty list)
-reader = client.query_with_params("SELECT * FROM taxi_trips LIMIT 10", [])
+reader = client.sql_with_params("SELECT * FROM taxi_trips LIMIT 10", [])
 ```
 
 Requires the `params` extra (`pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v4.0.0"`).
 
-The reader returned by `query_with_params` streams: batches arrive as you consume
+The reader returned by `sql_with_params` streams: batches arrive as you consume
 them, so the full result is never held in memory at once. Iterate it (as above)
 rather than calling `read_all()` when the result is large.
 
@@ -136,13 +136,59 @@ For precise control, pass `(value, pyarrow.DataType)` tuples instead of plain va
 ```python
 import pyarrow as pa
 
-reader = client.query_with_params(
+reader = client.sql_with_params(
     "SELECT * FROM t WHERE id = $1 AND amount = $2",
     [(123, pa.int32()), (99.99, pa.float64())],
 )
 ```
 
 Common PyArrow types: `pa.int8/16/32/64()`, `pa.uint8/16/32/64()`, `pa.float16/32/64()`, `pa.string()`, `pa.large_string()`, `pa.binary()`, `pa.large_binary()`, `pa.bool_()`, `pa.date32()`, `pa.date64()`, `pa.time32()`, `pa.time64()`, `pa.timestamp()`, `pa.duration()`, `pa.decimal128()`, `pa.decimal256()`, `pa.null()`. See the [PyArrow type reference](https://arrow.apache.org/docs/python/api/datatypes.html).
+
+### Asynchronous Queries
+
+`query()` and `query_with_params()` submit a query as a background job over the runtime's
+`/v1/queries` REST API and return a `QueryJob` immediately, instead of streaming results
+over Flight. Use these for long-running queries you want to poll, wait on, or cancel
+independently of the connection that submitted them.
+
+```python
+from spicepy import Client
+
+client = Client()
+
+job = client.query("SELECT * FROM taxi_trips WHERE trip_distance > 50")
+print(job.query_id, job.status())
+
+result = job.results()  # waits for completion, then fetches and concatenates all pages
+print(result.row_count)
+for row in result:
+    print(row)
+```
+
+`query_with_params()` takes JSON-encodable parameter values (unlike `sql_with_params()`,
+it does not support `(value, pyarrow.DataType)` tuples, since the job is submitted as
+JSON rather than over Flight):
+
+```python
+job = client.query_with_params(
+    "SELECT * FROM taxi_trips WHERE trip_distance > $1", [50]
+)
+```
+
+`QueryJob` exposes:
+
+- **query_id** (str): The runtime-assigned job id.
+- **status()**: Fetches the current `QueryStatus` — `Pending`, `Running`, `Succeeded`, `Failed`, `Cancelled` or `Closed`. A status added by a future runtime is preserved as a plain string rather than raising.
+- **wait(poll_interval=0.5, timeout=None)**: Polls until the job reaches a terminal status, raising `SpiceAIError` if `timeout` (seconds) elapses first.
+- **results()**: Waits for completion, then fetches and concatenates every result page into a `QueryResult`. Raises `SpiceAIError` (with the runtime's error code and message) if the job did not succeed.
+- **cancel()**: Best-effort cancellation; requires an API key with write access. Cancelling a job already in a terminal state is not an error.
+
+`QueryResult` holds `row_count` and `data` (a list of dicts, decoded from JSON). Iterating
+the result yields the rows directly.
+
+`client.list_queries(status=None, limit=None)` lists async jobs — a separate set from the
+synchronous queries reported by `list_active_queries()`. It returns a `ListQueriesResult`
+of `QuerySummary` (`query_id`, `status`, `sql_preview`, `created_at`).
 
 ### DataFrame API
 
@@ -176,7 +222,7 @@ Entry points on `Client`:
 | Method                     | Description                                           |
 | -------------------------- | ----------------------------------------------------- |
 | `client.table(name)`       | DataFrame over an existing table                      |
-| `client.sql(query)`        | DataFrame wrapping an arbitrary SQL query             |
+| `client.from_sql(query)`   | DataFrame wrapping an arbitrary SQL query             |
 | `client.from_arrow(table)` | DataFrame from a PyArrow `Table` (inline VALUES)      |
 | `client.from_pandas(df)`   | DataFrame from a pandas DataFrame (inline VALUES)     |
 | `client.from_pydict(data)` | DataFrame from a column-oriented dict (inline VALUES) |
@@ -204,7 +250,7 @@ amount_bucket = (
 
 `spicepy.functions` exposes common DataFusion functions: aggregates (`sum`, `avg`, `count`, `count_distinct`, `min`, `max`, `stddev`, `variance`, `median`, `approx_distinct`, `array_agg`), math (`abs`, `round`, `ceil`, `floor`, `sqrt`, `power`, `ln`, `log`, `exp`), strings (`lower`, `upper`, `length`, `trim`, `concat`, `substr`, `replace`, `regexp_match`, `starts_with`, `ends_with`), date/time (`now`, `current_date`, `current_timestamp`, `date_trunc`, `date_part`, `extract`), null/control flow (`coalesce`, `nullif`, `ifnull`, `case`), and window functions (`row_number`, `rank`, `dense_rank`, `percent_rank`, `cume_dist`, `lag`, `lead`, `first_value`, `last_value`, `nth_value`).
 
-Anything not covered by the DSL is reachable by writing SQL directly via `client.query(...)` or `client.sql(...)`.
+Anything not covered by the DSL is reachable by writing SQL directly via `client.sql(...)` or `client.from_sql(...)`.
 
 ### Catalog introspection
 
@@ -331,7 +377,7 @@ Values in `data` are decoded from JSON, so they carry JSON's types rather than t
 sql = client.nsql_generate_sql('top 5 customers by revenue')
 print(sql)
 
-table = client.query(sql).read_all()
+table = client.sql(sql).read_all()
 ```
 
 ### Runtime Health and Status
@@ -370,7 +416,7 @@ a future runtime is preserved as a plain string rather than raising.
 ### Listing and Cancelling Running Queries
 
 `list_active_queries()` reports the synchronous queries running in the caller's scope —
-those started by `query()`, `query_with_params()`, FlightSQL, NSQL and search — and
+those started by `sql()`, `sql_with_params()`, FlightSQL, NSQL and search — and
 `cancel_active_query()` stops one by id.
 
 The runtime does not hand a query's id back to the client that submitted it, so the two

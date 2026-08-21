@@ -102,7 +102,7 @@ def test_user_agent_is_populated():
 @skip_cloud()
 def test_flight_recent_blocks():
     client = get_cloud_client()
-    data = client.query("SELECT * FROM tpch.lineitem LIMIT 10")
+    data = client.sql("SELECT * FROM tpch.lineitem LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
@@ -118,7 +118,7 @@ SELECT o_orderkey,
        o_totalprice
 FROM tpch.orders LIMIT 2000
     """
-    reader = client.query(query)
+    reader = client.sql(query)
 
     total_rows = 0
     num_batches = 0
@@ -150,7 +150,7 @@ GROUP BY o_orderstatus
 ORDER BY total_price DESC"""
     try:
         prev_time = time.time()
-        _ = client.query(query, timeout=1)
+        _ = client.sql(query, timeout=1)
         post_time = time.time()
         # Add 0.1s buffer time to 1s timeout time
         if post_time - prev_time < 1.1:
@@ -164,7 +164,7 @@ ORDER BY total_price DESC"""
 def test_local_runtime():
     assert wait_for_ready(), "Spice runtime did not become ready in time"
     client = get_local_client()
-    data = client.query("SELECT * FROM taxi_trips LIMIT 10")
+    data = client.sql("SELECT * FROM taxi_trips LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
@@ -177,7 +177,7 @@ def test_local_runtime_refresh():
     assert response["message"] == "Dataset refresh triggered for taxi_trips."
 
     time.sleep(10)
-    data = client.query("SELECT * FROM taxi_trips LIMIT 10")
+    data = client.sql("SELECT * FROM taxi_trips LIMIT 10")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
@@ -190,7 +190,7 @@ def test_local_runtime_refresh():
     assert response["message"] == "Dataset refresh triggered for taxi_trips."
 
     time.sleep(10)
-    data = client.query("SELECT * FROM taxi_trips")
+    data = client.sql("SELECT * FROM taxi_trips")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 10
 
@@ -202,7 +202,7 @@ def test_local_runtime_refresh():
     assert response["message"] == "Dataset refresh triggered for taxi_trips."
 
     time.sleep(10)
-    data = client.query("SELECT * FROM taxi_trips")
+    data = client.sql("SELECT * FROM taxi_trips")
     pandas_data = data.read_pandas()
     assert len(pandas_data) == 20
 
@@ -308,7 +308,7 @@ def test_parameterized_query_local():
     client = get_local_client()
 
     # Test with float parameter
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 ORDER BY trip_distance LIMIT 5",
         [10.0],
     )
@@ -330,7 +330,7 @@ def test_parameterized_query_multiple_params():
     """Test parameterized query with multiple parameters."""
     client = get_local_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 AND fare_amount > $2 LIMIT 5",
         [5.0, 20.0],
     )
@@ -352,7 +352,7 @@ def test_parameterized_query_with_string():
     """Test parameterized query with string parameter."""
     client = get_local_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT trip_distance, fare_amount, store_and_fwd_flag FROM taxi_trips WHERE store_and_fwd_flag = $1 LIMIT 5",
         ["N"],
     )
@@ -372,7 +372,7 @@ def test_parameterized_query_with_explicit_types():
     """Test parameterized query with explicit PyArrow types."""
     client = get_local_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 LIMIT 5",
         [(10.0, pa.float64())],
     )
@@ -389,7 +389,7 @@ def test_parameterized_query_mixed_types():
     """Test parameterized query with mixed inferred and explicit types."""
     client = get_local_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT trip_distance, fare_amount FROM taxi_trips WHERE trip_distance > $1 AND fare_amount > $2 LIMIT 5",
         [5.0, (20.0, pa.float64())],  # Mixed: inferred float and explicit float64
     )
@@ -406,7 +406,7 @@ def test_parameterized_query_no_params():
     """Test parameterized query method with no parameters (regular query)."""
     client = get_local_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT trip_distance, fare_amount FROM taxi_trips LIMIT 5", []
     )
 
@@ -428,7 +428,7 @@ def test_cloud_parameterized_query_basic():
     client = get_cloud_client()
 
     # Test with integer parameter
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT l_orderkey, l_quantity, l_extendedprice FROM tpch.lineitem WHERE l_quantity > $1 LIMIT 10",
         [40],
     )
@@ -452,7 +452,7 @@ def test_cloud_parameterized_query_multiple_params():
     """Test parameterized query with multiple parameters on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT o_orderkey, o_totalprice, o_orderstatus
            FROM tpch.orders
            WHERE o_totalprice > $1 AND o_orderstatus = $2
@@ -479,7 +479,7 @@ def test_cloud_parameterized_query_with_explicit_types():
     """Test parameterized query with explicit PyArrow types on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT c_custkey, c_name, c_acctbal FROM tpch.customer WHERE c_acctbal > $1 LIMIT 10",
         [(5000.0, pa.float64())],
     )
@@ -501,7 +501,7 @@ def test_cloud_parameterized_query_empty_params():
     """Test parameterized query with empty params on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT n_nationkey, n_name, n_regionkey FROM tpch.nation LIMIT 5",
         [],
     )
@@ -520,7 +520,7 @@ def test_cloud_parameterized_query_string_param():
     """Test parameterized query with string parameter on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT n_nationkey, n_name, n_regionkey FROM tpch.nation WHERE n_name = $1",
         ["UNITED STATES"],
     )
@@ -542,7 +542,7 @@ def test_cloud_parameterized_query_with_join():
     """Test parameterized query with JOIN on Spice Cloud TPCH dataset."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT o.o_orderkey, o.o_totalprice, c.c_name, c.c_acctbal
            FROM tpch.orders o
            JOIN tpch.customer c ON o.o_custkey = c.c_custkey
@@ -572,7 +572,7 @@ def test_cloud_parameterized_query_aggregation():
     client = get_cloud_client()
 
     # Get aggregated stats for orders with status parameter
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT o_orderstatus,
                   COUNT(*) as order_count,
                   CAST(AVG(o_totalprice) AS DOUBLE) as avg_price,
@@ -602,7 +602,7 @@ def test_cloud_parameterized_query_in_clause_simulation():
     """Test parameterized query simulating IN clause with multiple ORs."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT r_regionkey, r_name, r_comment
            FROM tpch.region
            WHERE r_name = $1 OR r_name = $2""",
@@ -629,7 +629,7 @@ def test_cloud_parameterized_query_with_int8():
     """Test parameterized query with explicit int8 type on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT r_regionkey, r_name FROM tpch.region WHERE r_regionkey = $1",
         [(1, pa.int8())],
     )
@@ -651,7 +651,7 @@ def test_cloud_parameterized_query_with_int64():
     """Test parameterized query with explicit int64 type on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT l_orderkey, l_partkey, l_quantity FROM tpch.lineitem WHERE l_orderkey = $1 LIMIT 10",
         [(1, pa.int64())],
     )
@@ -673,7 +673,7 @@ def test_cloud_parameterized_query_with_float32():
     """Test parameterized query with explicit float32 type on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT l_orderkey, l_discount FROM tpch.lineitem WHERE l_discount >= $1 LIMIT 10",
         [(0.05, pa.float32())],
     )
@@ -697,7 +697,7 @@ def test_cloud_parameterized_query_subquery():
     """Test parameterized query with subquery on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT c_custkey, c_name, c_acctbal
            FROM tpch.customer
            WHERE c_nationkey IN (
@@ -722,7 +722,7 @@ def test_cloud_parameterized_query_order_by():
     """Test parameterized query with ORDER BY on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT o_orderkey, o_totalprice, o_orderdate
            FROM tpch.orders
            WHERE o_totalprice > $1
@@ -751,7 +751,7 @@ def test_cloud_parameterized_query_like_pattern():
     """Test parameterized query with LIKE pattern on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT p_partkey, p_name, p_brand FROM tpch.part WHERE p_brand = $1 LIMIT 10",
         ["Brand#13"],
     )
@@ -773,7 +773,7 @@ def test_cloud_parameterized_query_three_params():
     """Test parameterized query with three parameters on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT l_orderkey, l_quantity, l_extendedprice, l_discount
            FROM tpch.lineitem
            WHERE l_quantity >= $1 AND l_extendedprice > $2 AND l_discount <= $3
@@ -802,7 +802,7 @@ def test_cloud_parameterized_query_mixed_param_types():
     """Test parameterized query with mixed explicit and inferred param types."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT s_suppkey, s_name, s_acctbal, s_nationkey
            FROM tpch.supplier
            WHERE s_acctbal > $1 AND s_nationkey = $2
@@ -829,7 +829,7 @@ def test_cloud_parameterized_query_partsupp_table():
     """Test parameterized query on partsupp table on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT ps_partkey, ps_suppkey, ps_availqty, ps_supplycost
            FROM tpch.partsupp
            WHERE ps_supplycost > $1 AND ps_availqty > $2
@@ -856,7 +856,7 @@ def test_cloud_parameterized_query_larger_result_set():
     """Test parameterized query returning larger result set on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT l_orderkey, l_linenumber, l_quantity FROM tpch.lineitem WHERE l_quantity > $1 LIMIT 500",
         [45],
     )
@@ -879,7 +879,7 @@ def test_cloud_parameterized_query_count_aggregation():
     """Test parameterized query with COUNT aggregation on Spice Cloud."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT n_name, COUNT(*) as customer_count
            FROM tpch.customer c
            JOIN tpch.nation n ON c.c_nationkey = n.n_nationkey
@@ -907,7 +907,7 @@ def test_cloud_parameterized_query_null_safe():
     """Test parameterized query handling columns that might have NULL values."""
     client = get_cloud_client()
 
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT p_partkey, p_name, p_mfgr, p_comment
            FROM tpch.part
            WHERE p_size > $1
@@ -935,7 +935,7 @@ def test_cloud_parameterized_query_with_bool():
     client = get_cloud_client()
 
     # Using a comparison that returns a boolean-like result
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         """SELECT l_orderkey, l_returnflag, l_linestatus
            FROM tpch.lineitem
            WHERE l_returnflag = $1

@@ -7,14 +7,14 @@ to use with parameterized queries. Parameters can be:
 
 Example:
     # With automatic type inference
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT * FROM table WHERE id = $1 AND name = $2",
         [123, "test"]
     )
 
     # With explicit PyArrow types
     import pyarrow as pa
-    reader = client.query_with_params(
+    reader = client.sql_with_params(
         "SELECT * FROM table WHERE id = $1 AND amount = $2",
         [(123, pa.int32()), (99.99, pa.float64())]
     )
