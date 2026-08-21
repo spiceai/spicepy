@@ -257,7 +257,7 @@ def test_dataframe_set_operations(client: Client) -> None:
 
 
 def test_dataframe_unnest(client: Client) -> None:
-    rows = client.sql("SELECT make_array(1, 2, 3) AS a").unnest("a").to_pylist()
+    rows = client.from_sql("SELECT make_array(1, 2, 3) AS a").unnest("a").to_pylist()
     assert [r["a"] for r in rows] == [1, 2, 3]
 
 
@@ -396,7 +396,7 @@ def test_functions_window(client: Client) -> None:
 
 def test_functions_arrays_and_structs(client: Client) -> None:
     row = (
-        client.sql("SELECT 1 AS n")
+        client.from_sql("SELECT 1 AS n")
         .select(
             F.array_length(F.make_array(lit(1), lit(2), lit(3))).alias("len"),
             F.array_has(F.make_array(lit(1), lit(2)), lit(2)).alias("has"),
@@ -460,7 +460,7 @@ def test_cancel_active_query(client: Client) -> None:
             # a cross join can). Bounded inputs keep it finite: the runtime can
             # take minutes to actually stop a cancelled cross join, and an
             # unbounded one would keep burning CPU under the remaining tests.
-            reader = client.query(
+            reader = client.sql(
                 "SELECT sum(a.total_amount * b.total_amount) "
                 "FROM (SELECT * FROM taxi_trips LIMIT 500000) a "
                 "CROSS JOIN (SELECT * FROM taxi_trips LIMIT 500000) b"
