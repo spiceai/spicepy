@@ -178,7 +178,7 @@ job = client.query_with_params(
 `QueryJob` exposes:
 
 - **query_id** (str): The runtime-assigned job id.
-- **status()**: Fetches the current `QueryStatus` — `Pending`, `Running`, `Succeeded`, `Failed`, `Cancelled` or `Closed`. A status added by a future runtime is preserved as a plain string rather than raising.
+- **status()**: Fetches the current `QueryStatus` — `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED` or `CLOSED`. A status added by a future runtime is preserved as a plain string rather than raising.
 - **wait(poll_interval=0.5, timeout=None)**: Polls until the job reaches a terminal status, raising `SpiceAIError` if `timeout` (seconds) elapses first.
 - **results()**: Waits for completion, then fetches and concatenates every result page into a `QueryResult`. Raises `SpiceAIError` (with the runtime's error code and message) if the job did not succeed.
 - **cancel()**: Best-effort cancellation; requires an API key with write access. Cancelling a job already in a terminal state is not an error.
