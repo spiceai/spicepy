@@ -341,8 +341,8 @@ class _SpiceFlight:
         )
 
         # A well-behaved server always returns at least one endpoint to read
-        # results from. Check rather than index blindly, so a server that does
-        # not raises a SpiceAIError instead of a bare IndexError.
+        # results from. Check rather than index blindly, so a server that
+        # returns none produces a SpiceAIError instead of a bare IndexError.
         if not flight_info.endpoints:
             raise SpiceAIError(
                 "The query returned no Flight endpoint to read results from."
