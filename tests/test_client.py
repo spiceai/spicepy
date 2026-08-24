@@ -941,6 +941,31 @@ class TestSpiceFlight:
         mock_client.get_flight_info.assert_called_once()
 
     @patch("spicepy._client.flight")
+    def test_spice_flight_query_no_endpoints_raises(
+        self,
+        mock_flight: MagicMock,
+    ) -> None:
+        """A FlightInfo with no endpoints raises SpiceAIError, not IndexError."""
+        from spicepy._client import _SpiceFlight
+        from spicepy.error import SpiceAIError
+
+        mock_client = MagicMock()
+        mock_flight.connect.return_value = mock_client
+
+        mock_flight_info = MagicMock()
+        mock_flight_info.endpoints = []
+        mock_client.get_flight_info.return_value = mock_flight_info
+
+        flight_instance = _SpiceFlight(
+            grpc="grpc://localhost:50051",
+            api_key="",
+            tls_root_certs=b"cert",
+        )
+
+        with pytest.raises(SpiceAIError, match="no Flight endpoint"):
+            flight_instance.query("SELECT 1")
+
+    @patch("spicepy._client.flight")
     def test_spice_flight_query_with_timeout(
         self,
         mock_flight: MagicMock,

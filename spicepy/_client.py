@@ -340,6 +340,14 @@ class _SpiceFlight:
             flight.FlightDescriptor.for_command(query), self._flight_options
         )
 
+        # A well-behaved server always returns at least one endpoint to read
+        # results from. Check rather than index blindly, so a server that does
+        # not raises a SpiceAIError instead of a bare IndexError.
+        if not flight_info.endpoints:
+            raise SpiceAIError(
+                "The query returned no Flight endpoint to read results from."
+            )
+
         try:
             reader = self._threaded_flight_do_get(
                 ticket=flight_info.endpoints[0].ticket
