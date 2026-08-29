@@ -47,8 +47,13 @@ lint:
 # msg` wrapping, for one), so running both means whichever went last "wins" and
 # the other reports the file as unformatted. ruff still lints and auto-fixes;
 # black runs after it so the result is what CI will check.
+#
+# `--fix-only` rather than `--fix`: `--fix` exits nonzero while any unfixable
+# diagnostic remains, so make would stop there and never reach black, leaving a
+# file with an ordinary lint finding unformatted by the target whose job is to
+# format it. `make lint` is where unfixed findings get reported.
 format:
-	ruff check --fix spicepy tests
+	ruff check --fix-only spicepy tests
 	black spicepy tests
 
 # Check formatting without making changes
