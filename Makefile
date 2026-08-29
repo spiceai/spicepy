@@ -39,14 +39,21 @@ lint:
 	ruff check spicepy tests
 	pylint spicepy tests --fail-under=8.0
 
-# Format code with ruff
+# Apply ruff's lint fixes, then format with black
+#
+# black is the formatter of record: CI's formatting gate is `black --check`
+# (.github/workflows/lint.yml). ruff format is deliberately NOT run here — the
+# two disagree on constructs neither can be configured out of (`assert cond,
+# msg` wrapping, for one), so running both means whichever went last "wins" and
+# the other reports the file as unformatted. ruff still lints and auto-fixes;
+# black runs after it so the result is what CI will check.
 format:
-	ruff format spicepy tests
 	ruff check --fix spicepy tests
+	black spicepy tests
 
 # Check formatting without making changes
 format-check:
-	ruff format --check spicepy tests
+	black --check spicepy tests
 
 # Type checking with mypy
 type-check:
