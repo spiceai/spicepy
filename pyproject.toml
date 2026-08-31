@@ -40,7 +40,7 @@ Issues = "https://github.com/spiceai/spicepy/issues"
 test = [
     "pylint>=4.0.7",
     "flake8>=7.3.0",
-    "ruff>=0.16.4",
+    "ruff>=0.16.5",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
@@ -55,14 +55,14 @@ test = [
     "pyarrow>=25.0.1",
     "adbc-driver-flightsql>=1.12.0",
     "adbc-driver-manager>=1.12.0",
-    "polars>=1.43.2",
+    "polars>=1.44.1",
 ]
 params = [
     "adbc-driver-flightsql>=1.12.0",
     "adbc-driver-manager>=1.12.0",
 ]
 polars = [
-    "polars>=1.43.2",
+    "polars>=1.44.1",
 ]
 
 # ============== Tool Configuration ==============
@@ -274,5 +274,5 @@ skips = [
 
 [dependency-groups]
 dev = [
-    "build>=1.5.0",
+    "build>=1.6.0",
 ]
