@@ -109,7 +109,11 @@ ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"
-line-length = 120
+# Must match [tool.black]. black is the formatter (see the Makefile); ruff only
+# lints here. It still needs the same width, because `ruff check --fix` will
+# happily rewrite a line to any width it considers legal — at 120 it could widen
+# a line past 88 and turn a locally-green run red on CI's black gate.
+line-length = 88
 exclude = [
     ".git",
     ".mypy_cache",
@@ -188,6 +192,10 @@ ignore = [
     "SIM117", # Use single with statement
     "ERA001", # Found commented-out code
     "TC003",  # Move standard library import into type-checking block
+    "E501",   # Line too long. black owns line width and deliberately leaves
+              # long string literals, URLs and comments over the limit because
+              # it cannot split them; flagging those is noise the formatter
+              # will never resolve.
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -215,6 +223,11 @@ force-sort-within-sections = true
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.black]
+# The formatter of record — this is the width CI's `black --check` enforces.
+# Must match [tool.ruff].
+line-length = 88
 
 [tool.pytest.ini_options]
 minversion = "7.0"

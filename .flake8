@@ -1,2 +1,10 @@
 [flake8]
+# E501 is ignored because black owns line width (see the Makefile and
+# [tool.black] in pyproject.toml), and black deliberately leaves string
+# literals, URLs and comments it cannot split over the limit. Enforcing the
+# limit here would fail CI on lines `make format` can never resolve — the
+# local/CI drift this configuration exists to avoid. ruff ignores E501 for the
+# same reason. max-line-length is kept so the limit is the intended one should
+# E501 ever be re-enabled.
 max-line-length = 120
+extend-ignore = E501
