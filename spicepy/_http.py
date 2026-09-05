@@ -26,7 +26,44 @@ class RefreshOpts:
         }
 
 
-HttpMethod = Literal["POST", "GET", "PUT", "HEAD", "POST"]
+HttpMethod = Literal["GET", "POST", "PUT", "HEAD", "DELETE"]
+
+
+def runtime_error_detail(response: Response) -> str:
+    """Return the runtime's own explanation for a failed response, if it gave one.
+
+    The runtime answers most `/v1/*` errors with a JSON object carrying a
+    ``message`` — ``{"message": "Dataset taxi_trips not found"}`` — and some with
+    a bare text body. Both say what the caller got wrong, so both are worth
+    keeping; ``requests.Response.raise_for_status`` keeps neither.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        message = payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+
+    return (response.text or "").strip()
+
+
+def raise_for_runtime_error(response: Response, path: str) -> None:
+    """Raise `SpiceAIError` for a non-2xx response, carrying what the runtime said.
+
+    Raised in place of `requests.HTTPError` so callers catch one exception type
+    from this package rather than one from its HTTP dependency.
+    """
+    if response.ok:
+        return
+
+    detail = runtime_error_detail(response)
+    raise SpiceAIError(
+        f"{path} failed with status {response.status_code}"
+        + (f": {detail}" if detail else "")
+    )
 
 
 class HttpRequests:
@@ -71,17 +108,22 @@ class HttpRequests:
             verify=True,
             headers=headers,
         )
-        response.raise_for_status()
-        return response.json()
+        raise_for_runtime_error(response, path)
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise SpiceAIError(
+                f"{path} returned a response that was not valid JSON"
+            ) from exc
 
     def post_json(
         self, path: str, payload: dict[str, Any], accept: str | None = None
     ) -> Any:
         """POST a JSON payload and decode the JSON response.
 
-        Unlike `send_request`, a failed request raises `SpiceAIError` carrying
-        the runtime's own explanation. The runtime reports errors on these
-        endpoints as a plain-text body, which `raise_for_status` discards.
+        A failed request raises `SpiceAIError` carrying the runtime's own
+        explanation.
 
         `accept` selects a response representation where an endpoint offers
         more than one.
@@ -121,12 +163,7 @@ class HttpRequests:
             headers=headers,
         )
 
-        if not response.ok:
-            detail = (response.text or "").strip()
-            raise SpiceAIError(
-                f"{path} failed with status {response.status_code}"
-                + (f": {detail}" if detail else "")
-            )
+        raise_for_runtime_error(response, path)
 
         return response
 
