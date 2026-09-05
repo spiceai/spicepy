@@ -14,6 +14,7 @@ from spicepy.config import (
     SPICE_USER_AGENT,
     get_user_agent,
 )
+from spicepy.error import SpiceAIError
 from spicepy.params import infer_arrow_type
 
 
@@ -246,6 +247,35 @@ def test_user_agent(httpserver):
     response = client.refresh_dataset("test")
     httpserver.check_assertions()
     assert response == reply
+
+
+# pylint: disable=E1120
+def test_refresh_dataset_reports_the_runtime_explanation(httpserver):
+    """A refusal from the runtime reaches the caller with its reason intact.
+
+    Before, the runtime's ``{"message": ...}`` was dropped and the caller got a
+    ``requests.HTTPError`` naming only the status and the URL — which says
+    nothing about what to fix, and asks callers to catch an exception from this
+    package's HTTP dependency rather than from this package.
+    """
+    httpserver.expect_request(
+        "/v1/datasets/taxi_trips/acceleration/refresh"
+    ).respond_with_data(
+        json.dumps(
+            {"message": "Dataset taxi_trips does not have acceleration enabled"}
+        ),
+        status=400,
+        content_type="application/json",
+    )
+    client = Client(
+        flight_url=DEFAULT_LOCAL_FLIGHT_URL, http_url=httpserver.url_for("/")
+    )
+
+    with pytest.raises(SpiceAIError) as excinfo:
+        client.refresh_dataset("taxi_trips")
+
+    httpserver.check_assertions()
+    assert "does not have acceleration enabled" in str(excinfo.value)
 
 
 if __name__ == "__main__":
