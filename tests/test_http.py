@@ -331,7 +331,74 @@ class TestHttpRequestsSendRequest:
         result = http.send_request("GET", "/api/test")
 
         assert result == {"result": "success"}
-        mock_response.raise_for_status.assert_called_once()
+        mock_session.get.assert_called_once()
+
+    @patch("spicepy._http.Session")
+    def test_send_request_carries_the_runtime_message(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """A failed request reports what the runtime said, as a SpiceAIError.
+
+        The runtime explains these failures in the response body — which
+        ``raise_for_status`` discards, in favour of a ``requests.HTTPError``
+        naming only the status and the URL.
+        """
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = False
+        mock_response.status_code = 404
+        mock_response.json.return_value = {"message": "Dataset taxi_trips not found"}
+        mock_session.post.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+
+        with pytest.raises(SpiceAIError) as excinfo:
+            http.send_request("POST", "/v1/datasets/taxi_trips/acceleration/refresh")
+
+        assert "Dataset taxi_trips not found" in str(excinfo.value)
+        assert "404" in str(excinfo.value)
+
+    @patch("spicepy._http.Session")
+    def test_send_request_falls_back_to_the_response_text(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """Not every runtime error is a JSON object; the text body still carries."""
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = False
+        mock_response.status_code = 503
+        mock_response.json.side_effect = ValueError("not json")
+        mock_response.text = "  service unavailable  "
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+
+        with pytest.raises(SpiceAIError) as excinfo:
+            http.send_request("GET", "/v1/status")
+
+        assert "service unavailable" in str(excinfo.value)
+
+    @patch("spicepy._http.Session")
+    def test_send_request_reports_a_body_that_is_not_json(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """A 2xx that does not decode is a SpiceAIError, not a raw ValueError."""
+        mock_session = MagicMock()
+        mock_session.headers = {}
+        mock_response = MagicMock(spec=Response)
+        mock_response.ok = True
+        mock_response.json.side_effect = ValueError("not json")
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        http = HttpRequests("http://example.com", {})
+
+        with pytest.raises(SpiceAIError, match="not valid JSON"):
+            http.send_request("GET", "/v1/status")
 
     @patch("spicepy._http.Session")
     def test_send_request_post_with_body(self, mock_session_class: MagicMock) -> None:
