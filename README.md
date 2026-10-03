@@ -289,6 +289,20 @@ client.refresh_dataset(
 )
 ```
 
+A dataset the runtime cannot refresh — unknown, or not accelerated — raises
+`SpiceAIError` carrying the runtime's own explanation:
+
+```python
+from spicepy.error import SpiceAIError
+
+try:
+    client.refresh_dataset("taxi_trips")
+except SpiceAIError as err:
+    print(err)
+    # Spice AI error: /v1/datasets/taxi_trips/acceleration/refresh failed with
+    # status 400: Dataset taxi_trips does not have acceleration enabled
+```
+
 ### TLS and mTLS
 
 > **Note:** mTLS (client certificate authentication) is an [Enterprise](https://docs.spice.ai/docs/enterprise) feature of the Spice.ai runtime.
