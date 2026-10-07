@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .error import SpiceAIError
+
 SEARCH_PATH = "/v1/search"
+
+
+def _malformed(detail: str) -> SpiceAIError:
+    return SpiceAIError(f"{SEARCH_PATH} returned a malformed response: {detail}")
 
 
 @dataclass(frozen=True)
@@ -35,17 +41,13 @@ class SearchMatch:
     def from_json(cls, obj: dict[str, Any]) -> SearchMatch:
         """Build a match from one element of the runtime's ``results`` array.
 
-        The runtime omits ``data``, ``primary_key``, and ``metadata`` when they
-        are empty, so each is defaulted rather than required.
+        ``dataset``, ``_score``, and ``matches`` are always sent, so a match
+        without one raises :class:`~spicepy.SpiceAIError` rather than reading
+        as an empty, zero-scored match. The runtime omits ``data``,
+        ``primary_key``, and ``metadata`` when they are empty, so each is
+        defaulted rather than required.
         """
-        return cls(
-            dataset=obj.get("dataset", ""),
-            score=float(obj.get("_score", 0.0)),
-            matches=obj.get("matches") or {},
-            primary_key=obj.get("primary_key") or {},
-            data=obj.get("data") or {},
-            metadata=obj.get("metadata") or {},
-        )
+        return _parse_match(obj, 0)
 
 
 @dataclass(frozen=True)
@@ -61,10 +63,25 @@ class SearchResult:
 
     @classmethod
     def from_json(cls, obj: dict[str, Any]) -> SearchResult:
-        """Build a result from the runtime's ``/v1/search`` response body."""
+        """Build a result from the runtime's ``/v1/search`` response body.
+
+        Raises :class:`~spicepy.SpiceAIError` when the body lacks a field the
+        runtime always sends: defaulting it would report a malformed response
+        as zero results in zero milliseconds, indistinguishable from a real
+        empty search.
+        """
+        if not isinstance(obj, dict):
+            raise _malformed("not a JSON object")
+        results = obj.get("results")
+        if results is None:
+            raise _malformed("missing 'results'")
+        if not isinstance(results, list):
+            raise _malformed("'results' is not a list")
+        if obj.get("duration_ms") is None:
+            raise _malformed("missing 'duration_ms'")
         return cls(
-            results=[SearchMatch.from_json(m) for m in obj.get("results") or []],
-            duration_ms=int(obj.get("duration_ms", 0)),
+            results=[_parse_match(m, i) for i, m in enumerate(results)],
+            duration_ms=int(obj["duration_ms"]),
         )
 
     def __iter__(self):
@@ -72,6 +89,30 @@ class SearchResult:
 
     def __len__(self) -> int:
         return len(self.results)
+
+
+def _parse_match(obj: Any, index: int) -> SearchMatch:
+    """Build the ``index``-th match, naming it in any error."""
+    if not isinstance(obj, dict):
+        raise _malformed(f"result {index} is not an object")
+    dataset = obj.get("dataset")
+    # Older runtimes serialized the score as "score".
+    score = obj.get("_score", obj.get("score"))
+    matches = obj.get("matches")
+    if dataset is None:
+        raise _malformed(f"result {index} is missing 'dataset'")
+    if score is None:
+        raise _malformed(f"result {index} is missing '_score'")
+    if matches is None:
+        raise _malformed(f"result {index} is missing 'matches'")
+    return SearchMatch(
+        dataset=dataset,
+        score=float(score),
+        matches=matches,
+        primary_key=obj.get("primary_key") or {},
+        data=obj.get("data") or {},
+        metadata=obj.get("metadata") or {},
+    )
 
 
 def build_search_body(

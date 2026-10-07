@@ -112,7 +112,11 @@ class TestSearchResultParsing:
     def test_multiple_values_per_column(self) -> None:
         """A column may contribute more than one chunk to a single match."""
         match = SearchMatch.from_json(
-            {"matches": {"body": ["first chunk", "second chunk"]}, "_score": 0.1}
+            {
+                "matches": {"body": ["first chunk", "second chunk"]},
+                "dataset": "d",
+                "_score": 0.1,
+            }
         )
         assert match.matches["body"] == ["first chunk", "second chunk"]
 
@@ -134,6 +138,47 @@ class TestSearchResultParsing:
             }
         )
         assert [m.dataset for m in result] == ["a", "b"]
+
+    @pytest.mark.parametrize(
+        ("body", "detail"),
+        [
+            ({}, "missing 'results'"),
+            ({"error": "upstream timeout"}, "missing 'results'"),
+            ({"results": None, "duration_ms": 3}, "missing 'results'"),
+            ({"results": {}, "duration_ms": 3}, "'results' is not a list"),
+            ({"results": []}, "missing 'duration_ms'"),
+            ([], "not a JSON object"),
+            ({"results": [None], "duration_ms": 3}, "result 0 is not an object"),
+            (
+                {"results": [{"matches": {}, "_score": 0.9}], "duration_ms": 3},
+                "result 0 is missing 'dataset'",
+            ),
+            (
+                {"results": [{"matches": {}, "dataset": "d"}], "duration_ms": 3},
+                "result 0 is missing '_score'",
+            ),
+            (
+                {"results": [{"dataset": "d", "_score": 0.9}], "duration_ms": 3},
+                "result 0 is missing 'matches'",
+            ),
+        ],
+    )
+    def test_rejects_a_body_that_is_not_a_search_response(
+        self, body: object, detail: str
+    ) -> None:
+        """A body without the fields the runtime always sends is an error.
+
+        Defaulting them would report a malformed response (schema drift, or a
+        proxy answering for the runtime) as zero results in zero milliseconds,
+        indistinguishable from a real empty search.
+        """
+        with pytest.raises(SpiceAIError, match=detail):
+            SearchResult.from_json(body)  # type: ignore[arg-type]
+
+    def test_accepts_legacy_score_name(self) -> None:
+        """Older runtimes serialized the score as ``score``, not ``_score``."""
+        match = SearchMatch.from_json({"matches": {}, "dataset": "d", "score": 0.5})
+        assert match.score == pytest.approx(0.5)
 
 
 @pytest.mark.unit
