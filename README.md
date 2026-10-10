@@ -123,6 +123,20 @@ for batch in reader:
 reader = client.sql_with_params("SELECT * FROM taxi_trips LIMIT 10", [])
 ```
 
+Python's `int`, `float`, `bool`, `str`, `bytes`, `Decimal`, `datetime`, `date`, `time` and `timedelta` infer their Arrow type, and so do the numpy and pandas scalars a DataFrame hands back. That means a value read out of one query's result can be bound straight into the next. A numpy integer keeps its width, and a `pd.Timestamp` keeps its nanoseconds:
+
+```python
+trips = client.query_pandas("SELECT VendorID, tpep_pickup_datetime FROM taxi_trips LIMIT 1")
+first = trips.iloc[0]  # numpy.int64 and pandas.Timestamp, not int and datetime
+
+reader = client.sql_with_params(
+    "SELECT COUNT(*) FROM taxi_trips WHERE VendorID = $1 AND tpep_pickup_datetime >= $2",
+    [first["VendorID"], first["tpep_pickup_datetime"]],
+)
+```
+
+To pick the type yourself, pass a `(value, pyarrow.DataType)` tuple in place of the value.
+
 Requires the `params` extra (`pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v4.0.0"`).
 
 The reader returned by `sql_with_params` streams: batches arrive as you consume

@@ -612,6 +612,41 @@ class TestADBCClientCreateParamBatch:
     @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
     @patch("spicepy._client.adbc_driver_flightsql")
     @patch("spicepy._client.adbc_driver_manager")
+    def test_create_param_batch_dataframe_cells(
+        self,
+        mock_manager: MagicMock,
+        mock_flightsql: MagicMock,
+    ) -> None:
+        """Values read back out of a DataFrame bind without conversion."""
+        import pandas as pd
+
+        mock_flightsql.connect.return_value = MagicMock()
+        mock_manager.AdbcConnection.return_value = MagicMock()
+
+        row = pd.DataFrame(
+            {
+                "id": [7],
+                "flag": [True],
+                "picked_up": pd.to_datetime(["2024-01-31"]),
+            }
+        ).iloc[0]
+
+        client = _ADBCClient("grpc://localhost:50051")
+        batch = client._create_param_batch([row["id"], row["flag"], row["picked_up"]])
+
+        assert batch.schema.names == ["$1", "$2", "$3"]
+        assert batch.schema.types == [
+            pa.int64(),
+            pa.bool_(),
+            pa.timestamp(row["picked_up"].unit),
+        ]
+        assert batch.to_pylist() == [
+            {"$1": 7, "$2": True, "$3": pd.Timestamp("2024-01-31")}
+        ]
+
+    @pytest.mark.skipif(not ADBC_AVAILABLE, reason="ADBC not installed")
+    @patch("spicepy._client.adbc_driver_flightsql")
+    @patch("spicepy._client.adbc_driver_manager")
     def test_create_param_batch_multiple_params(
         self,
         mock_manager: MagicMock,

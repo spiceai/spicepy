@@ -38,7 +38,7 @@ from ._nsql import (
 from ._search import SEARCH_PATH, SearchResult, build_search_body
 from ._status import ConnectionDetails
 from .error import SpiceAIError
-from .params import infer_arrow_type
+from .params import param_array
 
 
 def is_macos_arm64() -> bool:
@@ -155,9 +155,7 @@ class _ADBCClient:
         Returns:
             Arrow RecordBatch containing the parameter values
         """
-        param_values = []
-        param_types = []
-
+        param_arrays = []
         for param in params:
             # Check if param is a tuple of (value, arrow_type)
             if (
@@ -166,20 +164,13 @@ class _ADBCClient:
                 and isinstance(param[1], pa.DataType)
             ):
                 value, arrow_type = param
-                param_values.append(value)
-                param_types.append(arrow_type)
+                param_arrays.append(pa.array([value], type=arrow_type))
             else:
-                param_values.append(param)
-                param_types.append(infer_arrow_type(param))
-
-        # Create parameter arrays (each with a single row)
-        param_arrays = []
-        for value, arrow_type in zip(param_values, param_types, strict=True):
-            param_arrays.append(pa.array([value], type=arrow_type))
+                param_arrays.append(param_array(param))
 
         # Create parameter schema with positional field names ($1, $2, etc.)
         param_fields = [
-            pa.field(f"${i + 1}", param_types[i]) for i in range(len(params))
+            pa.field(f"${i + 1}", array.type) for i, array in enumerate(param_arrays)
         ]
         param_schema = pa.schema(param_fields)
 
