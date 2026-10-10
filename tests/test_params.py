@@ -218,7 +218,13 @@ class TestNumpyAndPandasScalars:
             (np.datetime64("NaT", "m"), pa.timestamp("s")),
             (np.datetime64("NaT", "ms"), pa.timestamp("ms")),
             (np.datetime64("NaT", "ps"), pa.timestamp("ns")),
+            (np.timedelta64("NaT", "W"), pa.duration("s")),
+            (np.timedelta64("NaT", "D"), pa.duration("s")),
+            (np.timedelta64("NaT", "h"), pa.duration("s")),
             (np.timedelta64("NaT", "m"), pa.duration("s")),
+            (np.timedelta64("NaT", "s"), pa.duration("s")),
+            (np.timedelta64("NaT", "ms"), pa.duration("ms")),
+            (np.timedelta64("NaT", "ns"), pa.duration("ns")),
             (np.timedelta64("NaT", "us"), pa.duration("us")),
         ],
     )
@@ -274,6 +280,36 @@ class TestNumpyAndPandasScalars:
         """A value that cannot be rescaled to its base unit is refused, not wrapped."""
         value = np.array([2**62], dtype="timedelta64[4s]")[0]
         with pytest.raises(TypeError, match="does not fit in timedelta64"):
+            param_array(value)
+
+    @pytest.mark.parametrize(
+        ("dtype", "ticks", "expected_ns"),
+        [
+            ("timedelta64[4ps]", 2**62, 2**64 // 1000),
+            ("timedelta64[2fs]", 2**63 - 1, (2**64 - 2) // 10**6),
+            ("timedelta64[3as]", -(2**63) + 1, (-(2**63) + 1) * 3 // 10**9),
+        ],
+    )
+    def test_a_multiplied_sub_nanosecond_unit_reduces_before_the_overflow_check(
+        self, dtype: str, ticks: int, expected_ns: int
+    ) -> None:
+        """Only the nanosecond result has to fit in 64 bits, not the tick product."""
+        array = param_array(np.array([ticks], dtype=dtype)[0])
+        assert array.type == pa.duration("ns")
+        assert array.cast(pa.int64()).to_pylist() == [expected_ns]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            np.timedelta64(1, "M"),
+            np.timedelta64(1, "Y"),
+            np.timedelta64("NaT", "M"),
+            np.array([2], dtype="timedelta64[3M]")[0],
+        ],
+    )
+    def test_a_calendar_timedelta64_is_refused(self, value: Any) -> None:
+        """A month or year has no fixed length, so it has no duration to bind."""
+        with pytest.raises(TypeError, match="calendar duration"):
             param_array(value)
 
     def test_unsupported_numpy_scalar_still_raises(self) -> None:

@@ -49,7 +49,8 @@ def infer_arrow_type(value: Any) -> pa.DataType:
     - numpy scalars, as read out of a DataFrame or array: integers, floats and
       bool_ keep their numpy type (int32 → int32), datetime64[D] → date32,
       other datetime64 → timestamp and timedelta64 → duration, both in the
-      nearest unit Arrow supports
+      nearest unit Arrow supports. A month or year timedelta64 has no fixed
+      length and is rejected
 
     Args:
         value: The Python value to infer the type from
@@ -92,15 +93,10 @@ def _normalize(value: Any) -> tuple[Any, pa.DataType]:
             return None, pa.timestamp(_arrow_unit(unit))
         value = pd.Timestamp(value)
     elif isinstance(value, np.timedelta64):
+        _reject_calendar_duration(value)
         if np.isnat(value):
             return None, pa.duration(_arrow_unit(np.datetime_data(value.dtype)[0]))
-        unit = np.datetime_data(value.dtype)[0]
-        if unit in _SUB_NANOSECOND_UNITS:
-            # Floor in Python integers: numpy's own conversion floors too, but
-            # wraps around near the int64 minimum and flips the sign.
-            ticks = int(value.astype(np.int64))
-            value = np.timedelta64(ticks // _SUB_NANOSECOND_UNITS[unit], "ns")
-        value = pd.Timedelta(value)
+        value = _timedelta64_to_pandas(value)
     elif isinstance(value, np.bool_ | np.integer | np.floating):
         return value, pa.from_numpy_dtype(value.dtype)
 
@@ -115,6 +111,31 @@ def _normalize(value: Any) -> tuple[Any, pa.DataType]:
 
 _DATE_UNITS = ("Y", "M", "W", "D")
 _SUB_NANOSECOND_UNITS = {"ps": 10**3, "fs": 10**6, "as": 10**9}
+_CALENDAR_UNITS = ("Y", "M")
+
+
+def _reject_calendar_duration(value: np.timedelta64) -> None:
+    """Refuse a month or year ``timedelta64``, which has no fixed length.
+
+    Raises:
+        TypeError: If ``value`` counts months or years
+    """
+    if np.datetime_data(value.dtype)[0] in _CALENDAR_UNITS:
+        raise TypeError(
+            f"Unsupported parameter value: {value!r} is a calendar duration "
+            "with no fixed length; convert it to days or a finer unit first"
+        )
+
+
+def _timedelta64_to_pandas(value: np.timedelta64) -> pd.Timedelta:
+    """Convert a non-NaT ``timedelta64`` to a ``pd.Timedelta``."""
+    unit = np.datetime_data(value.dtype)[0]
+    if unit in _SUB_NANOSECOND_UNITS:
+        # Floor in Python integers: numpy's own conversion floors too, but
+        # wraps around near the int64 minimum and flips the sign.
+        ticks = int(value.astype(np.int64))
+        value = np.timedelta64(ticks // _SUB_NANOSECOND_UNITS[unit], "ns")
+    return pd.Timedelta(value)
 
 
 def _without_unit_multiplier(value: Any) -> Any:
@@ -123,7 +144,9 @@ def _without_unit_multiplier(value: Any) -> Any:
     A dtype like ``timedelta64[2s]`` counts in steps of two seconds, so its
     stored integer is half the number of seconds. Neither pandas nor Arrow
     reads the multiplier, so the value is rescaled to ``timedelta64[s]``
-    first, keeping the instant or duration it stands for.
+    first, keeping the instant or duration it stands for. A unit finer than a
+    nanosecond is rescaled straight to nanoseconds, flooring, so a value whose
+    tick count only overflows before that reduction still binds.
 
     Raises:
         TypeError: If the rescaled value does not fit in 64 bits
@@ -132,6 +155,9 @@ def _without_unit_multiplier(value: Any) -> Any:
     if count == 1 or np.isnat(value):
         return value
     ticks = int(value.astype(np.int64)) * count
+    if unit in _SUB_NANOSECOND_UNITS:
+        ticks //= _SUB_NANOSECOND_UNITS[unit]
+        unit = "ns"
     if not np.iinfo(np.int64).min < ticks <= np.iinfo(np.int64).max:
         kind = "datetime64" if isinstance(value, np.datetime64) else "timedelta64"
         raise TypeError(
@@ -150,7 +176,7 @@ def _arrow_unit(numpy_unit: str) -> str:
     """
     if numpy_unit in ("ms", "us", "ns"):
         return numpy_unit
-    if numpy_unit in ("h", "m", "s"):
+    if numpy_unit in ("W", "D", "h", "m", "s"):
         return "s"
     return "ns"
 
