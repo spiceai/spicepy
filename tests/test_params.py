@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from typing import Any
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pytest
 
-from spicepy.params import infer_arrow_type
+from spicepy.params import infer_arrow_type, param_array
 
 
 class TestInferArrowType:
@@ -122,3 +125,92 @@ class TestInferArrowType:
 
         with pytest.raises(TypeError, match="Unsupported parameter type: CustomClass"):
             infer_arrow_type(CustomClass())
+
+
+class TestNumpyAndPandasScalars:
+    """Values read out of a DataFrame or numpy array bind like the Python ones."""
+
+    def test_dataframe_cells_bind_as_parameters(self) -> None:
+        """Every cell type pandas hands back from ``iloc`` builds a parameter."""
+        frame = pd.DataFrame(
+            {
+                "id": [7],
+                "small": np.array([3], dtype=np.int32),
+                "flag": [True],
+                "fare": [12.5],
+                "name": ["x"],
+                "picked_up": pd.to_datetime(["2024-01-31 05:00:00.000000001"]),
+                "trip": pd.to_timedelta(["30min"]),
+            }
+        )
+        row = frame.iloc[0]
+
+        arrays = [param_array(row[column]) for column in frame.columns]
+
+        assert [a.type for a in arrays] == [
+            pa.int64(),
+            pa.int32(),
+            pa.bool_(),
+            pa.float64(),
+            pa.string(),
+            pa.timestamp("ns"),
+            pa.duration(row["trip"].unit),
+        ]
+        assert arrays[0].to_pylist() == [7]
+        assert arrays[2].to_pylist() == [True]
+        assert arrays[5].cast(pa.int64()).to_pylist() == [1_706_677_200_000_000_001]
+        assert arrays[6].to_pylist() == [timedelta(minutes=30)]
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (np.int64(5), pa.int64()),
+            (np.uint8(5), pa.uint8()),
+            (np.float32(1.5), pa.float32()),
+            (np.bool_(False), pa.bool_()),
+        ],
+    )
+    def test_numpy_numbers_keep_their_width(
+        self, value: Any, expected: pa.DataType
+    ) -> None:
+        """A numpy number binds as its own Arrow type, not a widened one."""
+        assert infer_arrow_type(value) == expected
+        assert param_array(value).to_pylist() == [value.item()]
+
+    def test_datetime64_day_binds_as_a_date(self) -> None:
+        """``datetime64[D]``, which Arrow cannot build from directly, is a date."""
+        array = param_array(np.datetime64("2024-01-31"))
+        assert array.type == pa.date32()
+        assert array.to_pylist() == [date(2024, 1, 31)]
+
+    def test_datetime64_minutes_bind_in_the_nearest_supported_unit(self) -> None:
+        """Arrow has no minute unit; the instant survives as seconds."""
+        array = param_array(np.datetime64("2024-01-31T05:00", "m"))
+        assert array.type == pa.timestamp("s")
+        assert array.to_pylist() == [datetime(2024, 1, 31, 5, 0)]
+
+    def test_timedelta64_minutes_bind_as_a_duration(self) -> None:
+        """``timedelta64[m]``, which Arrow rejects directly, is a duration."""
+        array = param_array(np.timedelta64(30, "m"))
+        assert array.type == pa.duration("s")
+        assert array.to_pylist() == [timedelta(minutes=30)]
+
+    def test_pandas_timestamp_keeps_nanoseconds_and_converts_to_utc(self) -> None:
+        """A tz-aware ``pd.Timestamp`` binds as its UTC instant, to the nanosecond."""
+        stamp = pd.Timestamp("2024-01-31 00:00:00.000000001", tz="America/New_York")
+        array = param_array(stamp)
+        assert array.type == pa.timestamp("ns")
+        assert array.cast(pa.int64()).to_pylist() == [1_706_677_200_000_000_001]
+
+    @pytest.mark.parametrize(
+        "value", [pd.NaT, np.datetime64("NaT"), np.timedelta64("NaT")]
+    )
+    def test_not_a_time_binds_as_null(self, value: Any) -> None:
+        """NaT is a missing value, so it binds as a typed null."""
+        array = param_array(value)
+        assert array.null_count == 1
+
+    def test_unsupported_numpy_scalar_still_raises(self) -> None:
+        """A numpy type with no SQL counterpart is still a clear TypeError."""
+        with pytest.raises(TypeError, match="Unsupported parameter type: complex"):
+            param_array(np.complex128(1 + 2j))
