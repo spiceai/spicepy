@@ -210,6 +210,72 @@ class TestNumpyAndPandasScalars:
         array = param_array(value)
         assert array.null_count == 1
 
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (np.datetime64("NaT", "D"), pa.date32()),
+            (np.datetime64("NaT", "M"), pa.date32()),
+            (np.datetime64("NaT", "m"), pa.timestamp("s")),
+            (np.datetime64("NaT", "ms"), pa.timestamp("ms")),
+            (np.datetime64("NaT", "ps"), pa.timestamp("ns")),
+            (np.timedelta64("NaT", "m"), pa.duration("s")),
+            (np.timedelta64("NaT", "us"), pa.duration("us")),
+        ],
+    )
+    def test_not_a_time_binds_as_the_type_of_its_unit(
+        self, value: Any, expected: pa.DataType
+    ) -> None:
+        """A NaT binds with the type a non-null value of its dtype would get."""
+        unit, _ = np.datetime_data(value.dtype)
+        assert infer_arrow_type(value) == expected
+        assert infer_arrow_type(value.dtype.type(1, unit)) == expected
+        array = param_array(value)
+        assert array.type == expected
+        assert array.null_count == 1
+
+    def test_timedelta64_finer_than_nanoseconds_binds_as_nanoseconds(self) -> None:
+        """Arrow's finest unit is nanoseconds; a picosecond duration truncates to it."""
+        array = param_array(np.timedelta64(1500, "ps"))
+        assert array.type == pa.duration("ns")
+        assert array.cast(pa.int64()).to_pylist() == [1]
+
+    @pytest.mark.parametrize(
+        ("unit", "scale"), [("ps", 10**3), ("fs", 10**6), ("as", 10**9)]
+    )
+    def test_negative_sub_nanosecond_timedelta64_keeps_its_sign(
+        self, unit: str, scale: int
+    ) -> None:
+        """Near the int64 minimum a sub-nanosecond duration floors, never wraps."""
+        ticks = -(2**63) + 1
+        array = param_array(np.timedelta64(ticks, unit))
+        assert array.cast(pa.int64()).to_pylist() == [ticks // scale]
+        assert param_array(np.timedelta64(-1500, "ps")).cast(
+            pa.int64()
+        ).to_pylist() == [-2]
+
+    @pytest.mark.parametrize(
+        ("dtype", "expected"),
+        [
+            ("timedelta64[2s]", timedelta(seconds=10)),
+            ("timedelta64[3ms]", timedelta(milliseconds=15)),
+            ("datetime64[10s]", datetime(1970, 1, 1, 0, 0, 50)),
+            ("datetime64[2h]", datetime(1970, 1, 1, 10, 0)),
+            ("datetime64[2D]", date(1970, 1, 11)),
+        ],
+    )
+    def test_a_unit_multiplier_scales_the_bound_value(
+        self, dtype: str, expected: Any
+    ) -> None:
+        """``timedelta64[2s]`` counts two-second steps; five of them bind as 10s."""
+        value = np.array([5], dtype=dtype)[0]
+        assert param_array(value).to_pylist() == [expected]
+
+    def test_a_unit_multiplier_that_overflows_raises(self) -> None:
+        """A value that cannot be rescaled to its base unit is refused, not wrapped."""
+        value = np.array([2**62], dtype="timedelta64[4s]")[0]
+        with pytest.raises(TypeError, match="does not fit in timedelta64"):
+            param_array(value)
+
     def test_unsupported_numpy_scalar_still_raises(self) -> None:
         """A numpy type with no SQL counterpart is still a clear TypeError."""
         with pytest.raises(TypeError, match="Unsupported parameter type: complex"):

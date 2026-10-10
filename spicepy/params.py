@@ -80,15 +80,26 @@ def param_array(value: Any) -> pa.Array:
 
 def _normalize(value: Any) -> tuple[Any, pa.DataType]:
     """Return ``value`` in a form ``pa.array`` accepts, with its Arrow type."""
+    if isinstance(value, np.datetime64 | np.timedelta64):
+        value = _without_unit_multiplier(value)
     if isinstance(value, np.datetime64):
-        if np.isnat(value):
-            return None, pa.timestamp("ns")
-        if np.datetime_data(value.dtype)[0] in ("Y", "M", "W", "D"):
+        unit = np.datetime_data(value.dtype)[0]
+        if unit in _DATE_UNITS:
+            if np.isnat(value):
+                return None, pa.date32()
             return value.astype("datetime64[D]").item(), pa.date32()
+        if np.isnat(value):
+            return None, pa.timestamp(_arrow_unit(unit))
         value = pd.Timestamp(value)
     elif isinstance(value, np.timedelta64):
         if np.isnat(value):
-            return None, pa.duration("ns")
+            return None, pa.duration(_arrow_unit(np.datetime_data(value.dtype)[0]))
+        unit = np.datetime_data(value.dtype)[0]
+        if unit in _SUB_NANOSECOND_UNITS:
+            # Floor in Python integers: numpy's own conversion floors too, but
+            # wraps around near the int64 minimum and flips the sign.
+            ticks = int(value.astype(np.int64))
+            value = np.timedelta64(ticks // _SUB_NANOSECOND_UNITS[unit], "ns")
         value = pd.Timedelta(value)
     elif isinstance(value, np.bool_ | np.integer | np.floating):
         return value, pa.from_numpy_dtype(value.dtype)
@@ -100,6 +111,48 @@ def _normalize(value: Any) -> tuple[Any, pa.DataType]:
     if isinstance(value, pd.Timedelta):
         return value, pa.duration(value.unit)
     return value, _infer_python_type(value)
+
+
+_DATE_UNITS = ("Y", "M", "W", "D")
+_SUB_NANOSECOND_UNITS = {"ps": 10**3, "fs": 10**6, "as": 10**9}
+
+
+def _without_unit_multiplier(value: Any) -> Any:
+    """Return a ``datetime64``/``timedelta64`` in its dtype's base unit.
+
+    A dtype like ``timedelta64[2s]`` counts in steps of two seconds, so its
+    stored integer is half the number of seconds. Neither pandas nor Arrow
+    reads the multiplier, so the value is rescaled to ``timedelta64[s]``
+    first, keeping the instant or duration it stands for.
+
+    Raises:
+        TypeError: If the rescaled value does not fit in 64 bits
+    """
+    unit, count = np.datetime_data(value.dtype)
+    if count == 1 or np.isnat(value):
+        return value
+    ticks = int(value.astype(np.int64)) * count
+    if not np.iinfo(np.int64).min < ticks <= np.iinfo(np.int64).max:
+        kind = "datetime64" if isinstance(value, np.datetime64) else "timedelta64"
+        raise TypeError(
+            f"Unsupported parameter value: {value!r} does not fit in {kind}[{unit}]"
+        )
+    return type(value)(ticks, unit)
+
+
+def _arrow_unit(numpy_unit: str) -> str:
+    """Return the Arrow time unit nearest a numpy one, as pandas would pick it.
+
+    Units coarser than a second become seconds and units finer than a
+    nanosecond become nanoseconds, so a NaT binds with the same type a
+    non-null value of its dtype does. A unitless NaT is nanoseconds, like
+    ``pd.NaT``.
+    """
+    if numpy_unit in ("ms", "us", "ns"):
+        return numpy_unit
+    if numpy_unit in ("h", "m", "s"):
+        return "s"
+    return "ns"
 
 
 def _infer_python_type(value: Any) -> pa.DataType:
