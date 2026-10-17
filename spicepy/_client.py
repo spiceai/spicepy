@@ -1070,7 +1070,8 @@ class Client:
                 A primary key column is returned under ``primary_key``, the
                 rest under ``data``.
             keywords: Keywords every candidate must contain. Each becomes a
-                case-insensitive substring match on the searched column, ANDed
+                case-insensitive ``ILIKE '%keyword%'`` on the searched column
+                (so ``%`` and ``_`` act as SQL wildcards), ANDed
                 with the others and with ``where`` before ranking. They add no
                 scoring signal and don't boost rows: a row missing any keyword
                 is dropped.
