@@ -1071,8 +1071,9 @@ class Client:
                 rest under ``data``.
             keywords: Keywords every candidate must contain. Each becomes a
                 case-insensitive substring match on the searched column, ANDed
-                with the others and with ``where`` before ranking. They don't
-                boost or rescore rows: a row missing any keyword is dropped.
+                with the others and with ``where`` before ranking. They add no
+                scoring signal and don't boost rows: a row missing any keyword
+                is dropped.
 
         Returns:
             A :class:`~spicepy.SearchResult` holding the matches and the

@@ -363,7 +363,7 @@ for match in result:
 - **limit** (int, optional): Maximum matches to return per dataset.
 - **where** (string, optional): A SQL predicate filtering candidate rows, without the leading `WHERE` — for example `'user_id = 42'`.
 - **additional_columns** (list of string, optional): Extra columns to return with each match. Primary key columns are returned under `primary_key`, the rest under `data`.
-- **keywords** (list of string, optional): Keeps only rows whose searched column contains every keyword (a case-insensitive substring match). Keywords filter candidates before ranking and don't change scores, so a row missing a keyword is dropped however similar it is.
+- **keywords** (list of string, optional): Keeps only rows whose searched column contains every keyword (a case-insensitive substring match). Keywords filter candidates before ranking and add no scoring signal of their own, so a row missing a keyword is dropped however similar it is.
 
 It returns a `SearchResult` holding `duration_ms` and a list of `SearchMatch`. Iterating the result yields the matches directly. Each `SearchMatch` has:
 
