@@ -1046,8 +1046,9 @@ class Client:
         """Search datasets for documents similar to ``text``.
 
         Runs against datasets that have an embedding column and a loaded
-        embedding model. Supplying ``keywords`` adds a lexical pass, which the
-        runtime combines with the vector scores into a hybrid ranking.
+        embedding model. ``keywords`` narrow the candidates rather than adding
+        to the ranking: a row is ranked only if the searched column contains
+        every keyword.
 
         Example:
             result = client.search(
@@ -1068,7 +1069,12 @@ class Client:
             additional_columns: Extra columns to return alongside each match.
                 A primary key column is returned under ``primary_key``, the
                 rest under ``data``.
-            keywords: Keywords for the lexical pass of a hybrid search.
+            keywords: Keywords every candidate must contain. Each becomes a
+                case-insensitive ``ILIKE '%keyword%'`` on the searched column
+                (so ``%`` and ``_`` act as SQL wildcards), ANDed
+                with the others and with ``where`` before ranking. They add no
+                scoring signal and don't boost rows: a row missing any keyword
+                is dropped.
 
         Returns:
             A :class:`~spicepy.SearchResult` holding the matches and the
