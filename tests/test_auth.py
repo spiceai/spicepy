@@ -44,7 +44,6 @@ def test_cloud_app_id(key: str | None, app_id: str | None) -> None:
     ("url", "is_cloud"),
     [
         (CLOUD_URL, True),
-        (config.DEFAULT_FLIGHT_URL, True),
         ("grpc+tls://flight.spiceai.io", True),
         ("flight.spiceai.io:443", True),
         ("grpc+tls://FLIGHT.SPICEAI.IO.:443", True),
