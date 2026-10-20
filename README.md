@@ -62,6 +62,23 @@ client = Client(
 - **tls_client_key** (Path or str, optional): Path to a PEM-encoded client private key for mTLS. Must be provided together with `tls_client_certificate`.
 - **user_agent** (str, optional): Custom `User-Agent` prefix. Build a default with `spicepy.config.get_user_agent()`.
 
+### Local runtime secured with an API key
+
+A Spice OSS runtime with [API key auth](https://spiceai.org/docs/api/auth) enabled (`runtime.auth.api-key`) accepts any key it is configured with:
+
+```python
+import os
+
+client = Client(
+    api_key=os.environ["SPICE_API_KEY"],  # e.g. "my-key"
+    flight_url="grpc://localhost:50051",
+    http_url="http://localhost:8090",
+)
+client.query_arrow("SELECT * FROM orders WHERE status = $1", params=["paid"])
+```
+
+The client sends `Authorization: Bearer <key>` on Flight and parameterized (ADBC) queries, and `X-API-Key` on HTTP calls. Only a Spice Cloud key (`<appId>|<secret>`) sent to a Spice Cloud address (a `*.spiceai.io` host) uses the Basic handshake.
+
 ## Usage
 
 ### Run a SQL query

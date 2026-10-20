@@ -59,6 +59,10 @@ jobs:
 
   pytest-integration:
     runs-on: ${{ matrix.os }}
+    # A healthy run takes ~4 minutes. Windows runners occasionally freeze while
+    # provisioning WSL (actions/runner-images#14938), where step timeouts don't
+    # fire; cap the job so a frozen runner fails in 30 minutes, not hours.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -166,6 +170,42 @@ jobs:
             sleep 1
           done
 
+      # A second runtime secured with an API key, for
+      # tests/test_integration_auth.py. OSS accepts the key only as a Bearer
+      # header, so this covers the auth path every SDK call must use. The key is
+      # a throwaway for this local runtime, not a secret. On Windows it runs in
+      # WSL; see the Windows steps below.
+      - name: Start API-key-secured spice runtime (Linux & macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p spice_auth
+          cd spice_auth
+          cat > spicepod.yaml <<'YAML'
+          version: v1
+          kind: Spicepod
+          name: spicepy_auth
+          runtime:
+            auth:
+              api-key:
+                enabled: true
+                keys: [ "spicepy-ci-key" ]
+          YAML
+          spiced --http 127.0.0.1:18090 --flight 127.0.0.1:50061 --node-bind-address 127.0.0.1:50062 &> spice.log &
+          for i in {1..60}; do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18090/v1/ready)" = 200 ]; then
+              echo "API-key-secured runtime is ready"
+              echo "SPICE_AUTH_FLIGHT_URL=grpc://127.0.0.1:50061" >> "$GITHUB_ENV"
+              echo "SPICE_AUTH_HTTP_URL=http://127.0.0.1:18090" >> "$GITHUB_ENV"
+              echo "SPICE_AUTH_API_KEY=spicepy-ci-key" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "Waiting for API-key-secured runtime... ($i/60)"
+            sleep 1
+          done
+          cat spice.log
+          echo "API-key-secured runtime did not become ready within 60 seconds"
+          exit 1
+
       - name: Init and start spice app (Windows)
         if: matrix.os == 'windows-latest'
         shell: wsl-bash {0}
@@ -201,6 +241,39 @@ jobs:
           echo "taxi_trips did not become queryable within 180 seconds"
           exit 1
 
+      # Same API-key-secured runtime as on Linux and macOS, inside WSL. The
+      # host-side step below exports SPICE_AUTH_* once its Flight port is
+      # reachable from Windows (a WSL step can't write $GITHUB_ENV).
+      - name: Start API-key-secured spice runtime (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: wsl-bash {0}
+        run: |
+          export PATH="$HOME/.spice/bin:$PATH"
+          mkdir -p spice_auth
+          cd spice_auth
+          cat > spicepod.yaml <<'YAML'
+          version: v1
+          kind: Spicepod
+          name: spicepy_auth
+          runtime:
+            auth:
+              api-key:
+                enabled: true
+                keys: [ "spicepy-ci-key" ]
+          YAML
+          nohup spiced --http 127.0.0.1:18090 --flight 127.0.0.1:50061 --node-bind-address 127.0.0.1:50062 > spice.log 2>&1 &
+          for i in $(seq 1 60); do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18090/v1/ready)" = 200 ]; then
+              echo "API-key-secured runtime is ready"
+              exit 0
+            fi
+            echo "Waiting for API-key-secured runtime... ($i/60)"
+            sleep 1
+          done
+          cat spice.log || true
+          echo "API-key-secured runtime did not become ready within 60 seconds"
+          exit 1
+
       # The Windows readiness poll above runs inside WSL and only checks the
       # HTTP port (8090). WSL2 forwards ports to the Windows host asynchronously,
       # so 8090-ready in WSL does not guarantee the host can reach the Flight
@@ -212,16 +285,22 @@ jobs:
         run: |
           python - <<'PY'
           import socket, sys, time
-          for i in range(60):
-              try:
-                  with socket.create_connection(("127.0.0.1", 50051), timeout=2):
-                      print("Flight port 50051 reachable from host")
-                      sys.exit(0)
-              except OSError:
-                  print(f"waiting for Flight 50051 from host... ({i + 1}/60)")
-                  time.sleep(1)
-          sys.exit("Flight port 50051 never became reachable from host")
+          # 50051: the main runtime. 50061: the API-key-secured runtime.
+          for port in (50051, 50061):
+              for i in range(60):
+                  try:
+                      with socket.create_connection(("127.0.0.1", port), timeout=2):
+                          print(f"Flight port {port} reachable from host")
+                          break
+                  except OSError:
+                      print(f"waiting for Flight {port} from host... ({i + 1}/60)")
+                      time.sleep(1)
+              else:
+                  sys.exit(f"Flight port {port} never became reachable from host")
           PY
+          echo "SPICE_AUTH_FLIGHT_URL=grpc://127.0.0.1:50061" >> "$GITHUB_ENV"
+          echo "SPICE_AUTH_HTTP_URL=http://127.0.0.1:18090" >> "$GITHUB_ENV"
+          echo "SPICE_AUTH_API_KEY=spicepy-ci-key" >> "$GITHUB_ENV"
 
       - name: Running tests
         env:
@@ -229,7 +308,7 @@ jobs:
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
           TEST_SPICE_CLOUD: 'false'
         run: |
-          pytest -s tests/test_main.py tests/test_integration_local.py -k "not cloud"
+          pytest -s tests/test_main.py tests/test_integration_local.py tests/test_integration_auth.py -k "not cloud"
 
       - name: Stop spice and check logs
         working-directory: spice_qs
@@ -237,6 +316,8 @@ jobs:
         run: |
           killall spice || true
           cat spice.log
+          echo "=== API-key-secured runtime log ==="
+          cat ../spice_auth/spice.log || true
 
       - name: Stop spice and check logs (Windows)
         if: matrix.os == 'windows-latest' && always()
@@ -245,6 +326,8 @@ jobs:
           pkill -f spiced || true
           echo "=== spice log ==="
           cat spice_qs/spice.log || true
+          echo "=== API-key-secured runtime log ==="
+          cat spice_auth/spice.log || true
 
   pytest-cloud:
     runs-on: ubuntu-latest

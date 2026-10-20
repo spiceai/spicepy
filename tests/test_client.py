@@ -932,13 +932,14 @@ class TestSpiceFlight:
         mock_client.authenticate_basic_token.return_value = ("bearer", b"token")
 
         flight_instance = _SpiceFlight(
-            grpc="grpc://localhost:50051",
-            api_key="test-api-key",
+            grpc="grpc+tls://us-east-1-prod-aws-flight.spiceai.io",
+            api_key="app|test-api-key",
             tls_root_certs=b"cert",
         )
 
         assert flight_instance is not None
-        mock_client.authenticate_basic_token.assert_called_with("", "test-api-key")
+        args = mock_client.authenticate_basic_token.call_args.args
+        assert args[:2] == ("", "app|test-api-key")
 
     @patch("spicepy._client.flight")
     def test_spice_flight_query_basic(
@@ -1078,8 +1079,8 @@ class TestSpiceFlight:
         mock_client.authenticate_basic_token.return_value = ("bearer", b"token")
 
         flight_instance = _SpiceFlight(
-            grpc="grpc://localhost:50051",
-            api_key="test-key",
+            grpc="grpc+tls://us-east-1-prod-aws-flight.spiceai.io",
+            api_key="app|test-key",
             tls_root_certs=b"cert",
         )
 
