@@ -166,6 +166,42 @@ jobs:
             sleep 1
           done
 
+      # A second runtime secured with an API key, for
+      # tests/test_integration_auth.py. OSS accepts the key only as a Bearer
+      # header, so this covers the auth path every SDK call must use. The key is
+      # a throwaway for this local runtime, not a secret. Not run on Windows,
+      # where the module skips.
+      - name: Start API-key-secured spice runtime (Linux & macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p spice_auth
+          cd spice_auth
+          cat > spicepod.yaml <<'YAML'
+          version: v1
+          kind: Spicepod
+          name: spicepy_auth
+          runtime:
+            auth:
+              api-key:
+                enabled: true
+                keys: [ "spicepy-ci-key" ]
+          YAML
+          spiced --http 127.0.0.1:18090 --flight 127.0.0.1:50061 --node-bind-address 127.0.0.1:50062 &> spice.log &
+          for i in {1..60}; do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18090/v1/ready)" = 200 ]; then
+              echo "API-key-secured runtime is ready"
+              echo "SPICE_AUTH_FLIGHT_URL=grpc://127.0.0.1:50061" >> "$GITHUB_ENV"
+              echo "SPICE_AUTH_HTTP_URL=http://127.0.0.1:18090" >> "$GITHUB_ENV"
+              echo "SPICE_AUTH_API_KEY=spicepy-ci-key" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "Waiting for API-key-secured runtime... ($i/60)"
+            sleep 1
+          done
+          cat spice.log
+          echo "API-key-secured runtime did not become ready within 60 seconds"
+          exit 1
+
       - name: Init and start spice app (Windows)
         if: matrix.os == 'windows-latest'
         shell: wsl-bash {0}
@@ -229,7 +265,7 @@ jobs:
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
           TEST_SPICE_CLOUD: 'false'
         run: |
-          pytest -s tests/test_main.py tests/test_integration_local.py -k "not cloud"
+          pytest -s tests/test_main.py tests/test_integration_local.py tests/test_integration_auth.py -k "not cloud"
 
       - name: Stop spice and check logs
         working-directory: spice_qs
@@ -237,6 +273,8 @@ jobs:
         run: |
           killall spice || true
           cat spice.log
+          echo "=== API-key-secured runtime log ==="
+          cat ../spice_auth/spice.log || true
 
       - name: Stop spice and check logs (Windows)
         if: matrix.os == 'windows-latest' && always()
