@@ -214,11 +214,12 @@ def test_flight_timeout_applies_to_one_call_only(mock_client) -> None:
         sf.query("SELECT 1", timeout=5)
         sf.query("SELECT 1")
 
-    assert seen == [1, DEFAULT_QUERY_TIMEOUT_SECS, 5, DEFAULT_QUERY_TIMEOUT_SECS]
+    expected = [1, DEFAULT_QUERY_TIMEOUT_SECS, 5, DEFAULT_QUERY_TIMEOUT_SECS]
+    assert seen == pytest.approx(expected, abs=1)
     info_timeouts = [
         c.args[1].timeout for c in mock_client.get_flight_info.call_args_list
     ]
-    assert info_timeouts == pytest.approx(seen, abs=1)
+    assert info_timeouts == pytest.approx(expected, abs=1)
     assert sf._flight_options.timeout == DEFAULT_QUERY_TIMEOUT_SECS
 
 
@@ -257,3 +258,22 @@ def test_flight_query_past_deadline_is_not_retried(mock_client) -> None:
     with pytest.raises(TimeoutError):
         sf.query("SELECT 1", timeout=1)
     assert mock_client.authenticate_basic_token.call_count == calls
+
+
+def test_flight_do_get_retry_gets_only_remaining_budget(mock_client) -> None:
+    """A do_get retried after renewal gets what's left of the timeout."""
+    sf = _SpiceFlight(CLOUD_URL, "app|secret", b"cert")
+    seen: list[float] = []
+
+    def do_get(_ticket, options):
+        seen.append(options.timeout)
+        if len(seen) == 1:
+            time.sleep(0.6)
+            raise FlightUnauthenticatedError("expired")
+        return "reader"
+
+    with patch.object(sf, "_threaded_flight_do_get", side_effect=do_get):
+        assert sf.query("SELECT 1", timeout=1) == "reader"
+    assert len(seen) == 2
+    assert seen[0] <= 1
+    assert 0 < seen[1] <= 0.5

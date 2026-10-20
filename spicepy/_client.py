@@ -453,12 +453,10 @@ class _SpiceFlight:
             )
         ticket = flight_info.endpoints[0].ticket
 
-        # do_get starts the result stream; reading it is bounded by the
-        # query's full timeout, as before.
+        # The whole query, including any session renewal and retry, stays
+        # within the caller's timeout.
         reader = self._with_reauth(
-            lambda _left: self._threaded_flight_do_get(
-                ticket, self._call_options(effective_timeout)
-            ),
+            lambda left: self._threaded_flight_do_get(ticket, self._call_options(left)),
             effective_timeout,
             deadline,
         )
