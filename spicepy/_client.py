@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import platform
 import threading
+import time
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlsplit
 import uuid
@@ -357,7 +358,7 @@ class _SpiceFlight:
         )
         self._authenticate()
 
-    def _authenticate(self):
+    def _authenticate(self, timeout: float = DEFAULT_QUERY_TIMEOUT_SECS):
         if self._api_key and self._bearer_auth:
             # The key itself is the credential: no handshake, no session.
             self.headers = [
@@ -365,8 +366,15 @@ class _SpiceFlight:
                 self._user_agent_header,
             ]
         elif self._api_key:
+            # Bound the handshake, so renewing a session mid-query can't
+            # outlast that query's timeout.
+            handshake_options = flight.FlightCallOptions(
+                headers=[self._user_agent_header], timeout=timeout
+            )
             self.headers = [
-                self._flight_client.authenticate_basic_token("", self._api_key),
+                self._flight_client.authenticate_basic_token(
+                    "", self._api_key, handshake_options
+                ),
                 self._user_agent_header,
             ]
         else:
@@ -375,7 +383,7 @@ class _SpiceFlight:
             headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
         )
 
-    def _call_options(self, timeout: int) -> flight.FlightCallOptions:
+    def _call_options(self, timeout: float) -> flight.FlightCallOptions:
         """Build call options for one query.
 
         A per-call ``timeout`` must not leak into later queries, so it is never
@@ -390,20 +398,28 @@ class _SpiceFlight:
         # rejected Bearer key would just be resent unchanged, so it's final.
         return bool(self._api_key) and not self._bearer_auth
 
-    def _with_reauth(self, call, timeout: int):
+    def _with_reauth(self, call, timeout: int, deadline: float):
         """Run a Flight call, renewing an expired Basic session once.
 
-        ``call`` must rebuild its call options on each invocation so a retry
-        picks up the new session token.
+        ``call`` takes the seconds left before ``deadline`` and builds its call
+        options from them, so a retry uses the new session token and the
+        renewal and retry together stay within the query's timeout.
         """
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise flight.FlightTimedOutError("Query deadline exceeded")
+            return left
+
         try:
             try:
-                return call()
+                return call(remaining())
             except flight.FlightUnauthenticatedError:
                 if not self._can_reauthenticate():
                     raise
-                self._authenticate()
-                return call()
+                self._authenticate(remaining())
+                return call(remaining())
         except flight.FlightTimedOutError as exc:
             raise TimeoutError(
                 f"Query timed out and was canceled after {timeout} seconds."
@@ -418,12 +434,14 @@ class _SpiceFlight:
             raise ValueError("Timeout must be a positive integer")
         effective_timeout = DEFAULT_QUERY_TIMEOUT_SECS if timeout is None else timeout
 
+        deadline = time.monotonic() + effective_timeout
         descriptor = flight.FlightDescriptor.for_command(query)
         flight_info = self._with_reauth(
-            lambda: self._flight_client.get_flight_info(
-                descriptor, self._call_options(effective_timeout)
+            lambda left: self._flight_client.get_flight_info(
+                descriptor, self._call_options(left)
             ),
             effective_timeout,
+            deadline,
         )
 
         # A well-behaved server always returns at least one endpoint to read
@@ -435,11 +453,14 @@ class _SpiceFlight:
             )
         ticket = flight_info.endpoints[0].ticket
 
+        # do_get starts the result stream; reading it is bounded by the
+        # query's full timeout, as before.
         reader = self._with_reauth(
-            lambda: self._threaded_flight_do_get(
+            lambda _left: self._threaded_flight_do_get(
                 ticket, self._call_options(effective_timeout)
             ),
             effective_timeout,
+            deadline,
         )
         return reader
 

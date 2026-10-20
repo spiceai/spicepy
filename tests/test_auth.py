@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock, patch
 
-from pyarrow._flight import FlightUnauthenticatedError
+from pyarrow._flight import FlightTimedOutError, FlightUnauthenticatedError
 import pytest
 
 from spicepy import config
@@ -161,7 +162,11 @@ def test_flight_plain_key_sends_bearer_without_handshake(mock_client) -> None:
 
 def test_flight_cloud_key_uses_basic_handshake(mock_client) -> None:
     sf = _SpiceFlight(CLOUD_URL, "app|secret", b"cert")
-    mock_client.authenticate_basic_token.assert_called_once_with("", "app|secret")
+    mock_client.authenticate_basic_token.assert_called_once()
+    args = mock_client.authenticate_basic_token.call_args.args
+    assert args[:2] == ("", "app|secret")
+    # The handshake is bounded and carries the user agent.
+    assert args[2].timeout == DEFAULT_QUERY_TIMEOUT_SECS
     assert _header(sf, b"authorization") == b"Bearer s"
 
 
@@ -214,7 +219,7 @@ def test_flight_timeout_applies_to_one_call_only(mock_client) -> None:
     info_timeouts = [
         c.args[1].timeout for c in mock_client.get_flight_info.call_args_list
     ]
-    assert info_timeouts == seen
+    assert info_timeouts == pytest.approx(seen, abs=1)
     assert sf._flight_options.timeout == DEFAULT_QUERY_TIMEOUT_SECS
 
 
@@ -222,3 +227,34 @@ def test_flight_timeout_rejects_bool(mock_client) -> None:
     sf = _SpiceFlight(LOCAL_URL, "", b"cert")
     with pytest.raises(ValueError, match="positive integer"):
         sf.query("SELECT 1", timeout=True)
+
+
+def test_flight_session_renewal_is_bounded_by_query_timeout(mock_client) -> None:
+    """Renewing an expired Cloud session mid-query uses the remaining deadline."""
+    sf = _SpiceFlight(CLOUD_URL, "app|secret", b"cert")
+    mock_client.get_flight_info.side_effect = FlightUnauthenticatedError("expired")
+    renew_timeouts: list[float] = []
+
+    def slow_renewal(_user, _key, options):
+        renew_timeouts.append(options.timeout)
+        raise FlightTimedOutError("handshake deadline exceeded")
+
+    mock_client.authenticate_basic_token.side_effect = slow_renewal
+    with pytest.raises(TimeoutError, match="after 1 seconds"):
+        sf.query("SELECT 1", timeout=1)
+    assert len(renew_timeouts) == 1
+    assert 0 < renew_timeouts[0] <= 1
+
+
+def test_flight_query_past_deadline_is_not_retried(mock_client) -> None:
+    sf = _SpiceFlight(CLOUD_URL, "app|secret", b"cert")
+    calls = mock_client.authenticate_basic_token.call_count
+
+    def expire(*_args):
+        time.sleep(1.05)
+        raise FlightUnauthenticatedError("expired")
+
+    mock_client.get_flight_info.side_effect = expire
+    with pytest.raises(TimeoutError):
+        sf.query("SELECT 1", timeout=1)
+    assert mock_client.authenticate_basic_token.call_count == calls

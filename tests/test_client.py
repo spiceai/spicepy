@@ -938,7 +938,8 @@ class TestSpiceFlight:
         )
 
         assert flight_instance is not None
-        mock_client.authenticate_basic_token.assert_called_with("", "app|test-api-key")
+        args = mock_client.authenticate_basic_token.call_args.args
+        assert args[:2] == ("", "app|test-api-key")
 
     @patch("spicepy._client.flight")
     def test_spice_flight_query_basic(
