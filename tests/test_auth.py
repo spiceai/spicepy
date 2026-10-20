@@ -61,10 +61,17 @@ def test_is_cloud_address(url: str | None, is_cloud: bool) -> None:
     assert _is_cloud_address(url) is is_cloud
 
 
-def test_configured_cloud_url_counts_as_cloud() -> None:
-    with patch.object(config, "DEFAULT_FLIGHT_URL", "grpc+tls://cloud.example:443"):
-        assert _is_cloud_address("grpc+tls://cloud.example:443")
-        assert not _use_bearer_auth("app|secret", "grpc+tls://cloud.example:443")
+def test_flight_url_override_to_oss_still_uses_bearer() -> None:
+    """SPICE_FLIGHT_URL pointing at an OSS runtime must not make it Cloud."""
+    with patch.object(config, "DEFAULT_FLIGHT_URL", LOCAL_URL):
+        assert not _is_cloud_address(LOCAL_URL)
+        assert _use_bearer_auth("app|local-secret", LOCAL_URL)
+        db_kwargs = _adbc_db_kwargs(LOCAL_URL, "app|local-secret")
+        assert (
+            db_kwargs["adbc.flight.sql.authorization_header"]
+            == "Bearer app|local-secret"
+        )
+        assert "password" not in db_kwargs
 
 
 @pytest.mark.parametrize(

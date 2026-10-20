@@ -77,7 +77,7 @@ client = Client(
 client.query_arrow("SELECT * FROM orders WHERE status = $1", params=["paid"])
 ```
 
-The client sends `Authorization: Bearer <key>` on Flight and parameterized (ADBC) queries, and `X-API-Key` on HTTP calls. Only a Spice Cloud key (`<appId>|<secret>`) sent to a Spice Cloud address (`*.spiceai.io`, or `SPICE_FLIGHT_URL`) uses the Basic handshake.
+The client sends `Authorization: Bearer <key>` on Flight and parameterized (ADBC) queries, and `X-API-Key` on HTTP calls. Only a Spice Cloud key (`<appId>|<secret>`) sent to a Spice Cloud address (a `*.spiceai.io` host) uses the Basic handshake.
 
 ## Usage
 

@@ -92,15 +92,14 @@ def _cloud_app_id(api_key: str | None) -> str | None:
 
 
 def _is_cloud_address(url: str | None) -> bool:
-    """Report whether a Flight URL points at Spice Cloud.
+    """Report whether a Flight URL points at Spice Cloud (a ``spiceai.io`` host).
 
-    True for the configured Cloud Flight URL (``config.DEFAULT_FLIGHT_URL``,
-    which ``SPICE_FLIGHT_URL`` overrides) and for any ``spiceai.io`` host.
+    Only the host decides. ``SPICE_FLIGHT_URL`` is a general endpoint override
+    that may point at an OSS runtime, so matching it would send that runtime
+    the Basic handshake it rejects.
     """
     if not url:
         return False
-    if url.rstrip("/") == config.DEFAULT_FLIGHT_URL.rstrip("/"):
-        return True
     try:
         host = urlsplit(url if "://" in url else f"//{url}").hostname or ""
     except ValueError:
