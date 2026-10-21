@@ -19,17 +19,17 @@ Spice.ai client library for Python.
 `spicepy` is not published on PyPI under that name; install directly from GitHub:
 
 ```bash
-pip install git+https://github.com/spiceai/spicepy@v4.0.0
+pip install git+https://github.com/spiceai/spicepy@v4.0.1
 ```
 
 Optional extras:
 
 ```bash
 # Parameterized queries (ADBC FlightSQL driver)
-pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v4.0.0"
+pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v4.0.1"
 
 # Polars output support
-pip install "spicepy[polars] @ git+https://github.com/spiceai/spicepy@v4.0.0"
+pip install "spicepy[polars] @ git+https://github.com/spiceai/spicepy@v4.0.1"
 ```
 
 ## Connecting
@@ -154,7 +154,7 @@ reader = client.sql_with_params(
 
 To pick the type yourself, pass a `(value, pyarrow.DataType)` tuple in place of the value.
 
-Requires the `params` extra (`pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v4.0.0"`).
+Requires the `params` extra (`pip install "spicepy[params] @ git+https://github.com/spiceai/spicepy@v4.0.1"`).
 
 The reader returned by `sql_with_params` streams: batches arrive as you consume
 them, so the full result is never held in memory at once. Iterate it (as above)
