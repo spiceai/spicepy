@@ -4,8 +4,9 @@ import os
 from pathlib import Path
 import platform
 import threading
+import time
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 import uuid
 
 import certifi
@@ -71,6 +72,55 @@ except (ImportError, ModuleNotFoundError):
 
 DEFAULT_QUERY_TIMEOUT_SECS = 10 * 60
 
+# FlightSQL ADBC driver option that sends a fixed ``authorization`` header on
+# every call instead of doing a Basic-auth handshake.
+_ADBC_AUTHORIZATION_HEADER = "adbc.flight.sql.authorization_header"
+
+
+def _cloud_app_id(api_key: str | None) -> str | None:
+    """Return the app ID of a Spice Cloud key (``<appId>|<secret>``), else None.
+
+    Only a well-formed key with exactly one ``|`` and non-empty parts on both
+    sides counts as a Cloud key. Anything else is a plain key, as configured on
+    a Spice OSS runtime with ``runtime.auth.api-key``.
+    """
+    if not api_key:
+        return None
+    app_id, sep, secret = api_key.partition("|")
+    if not sep or not app_id or not secret or "|" in secret:
+        return None
+    return app_id
+
+
+def _is_cloud_address(url: str | None) -> bool:
+    """Report whether a Flight URL points at Spice Cloud (a ``spiceai.io`` host).
+
+    Only the host decides. ``SPICE_FLIGHT_URL`` is a general endpoint override
+    that may point at an OSS runtime, so matching it would send that runtime
+    the Basic handshake it rejects.
+    """
+    if not url:
+        return False
+    try:
+        host = urlsplit(url if "://" in url else f"//{url}").hostname or ""
+    except ValueError:
+        return False
+    host = host.lower().rstrip(".")
+    return host == "spiceai.io" or host.endswith(".spiceai.io")
+
+
+def _use_bearer_auth(api_key: str | None, url: str | None) -> bool:
+    """Report whether ``api_key`` is sent as ``Authorization: Bearer <key>``.
+
+    Spice OSS runtimes secured with an API key accept only the Bearer form and
+    reject the Flight Basic-auth handshake with "Invalid handshake request".
+    Only a Cloud key (``<appId>|<secret>``) sent to a Spice Cloud address keeps
+    the Basic handshake. This matches gospice, spice-java, and spice-dotnet.
+    """
+    if not api_key:
+        return False
+    return _cloud_app_id(api_key) is None or not _is_cloud_address(url)
+
 
 def _stream_until_closed(
     reader: pa.RecordBatchReader,
@@ -130,8 +180,11 @@ class _ADBCClient:
         # Add user agent header
         db_kwargs["adbc.flight.sql.rpc.call_header.user-agent"] = ua_string
 
-        # Add authentication if API key provided
-        if self._api_key:
+        # Add authentication if API key provided. OSS runtimes accept only a
+        # Bearer header; the Basic handshake is kept for Cloud keys to Cloud.
+        if _use_bearer_auth(self._api_key, self._uri):
+            db_kwargs[_ADBC_AUTHORIZATION_HEADER] = f"Bearer {self._api_key}"
+        elif self._api_key:
             db_kwargs[adbc_driver_manager.DatabaseOptions.USERNAME.value] = ""
             db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = (
                 self._api_key
@@ -296,39 +349,99 @@ class _SpiceFlight:
                 connect_kwargs["private_key"] = f.read()
         self._flight_client = flight.connect(grpc, **connect_kwargs)
         self._api_key = api_key
-        self.headers = [_SpiceFlight._user_agent(user_agent)]
+        # Kept so re-authentication doesn't drop the caller's user agent.
+        self._user_agent_header = _SpiceFlight._user_agent(user_agent)
+        self._bearer_auth = _use_bearer_auth(api_key, grpc)
+        self.headers = [self._user_agent_header]
         self._flight_options = flight.FlightCallOptions(
             headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
         )
         self._authenticate()
 
-    def _authenticate(self):
-        if self._api_key:
+    def _authenticate(self, timeout: float = DEFAULT_QUERY_TIMEOUT_SECS):
+        if self._api_key and self._bearer_auth:
+            # The key itself is the credential: no handshake, no session.
             self.headers = [
-                self._flight_client.authenticate_basic_token("", self._api_key),
-                _SpiceFlight._user_agent(),
+                (b"authorization", f"Bearer {self._api_key}".encode()),
+                self._user_agent_header,
             ]
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+        elif self._api_key:
+            # Bound the handshake, so renewing a session mid-query can't
+            # outlast that query's timeout.
+            handshake_options = flight.FlightCallOptions(
+                headers=[self._user_agent_header], timeout=timeout
             )
+            self.headers = [
+                self._flight_client.authenticate_basic_token(
+                    "", self._api_key, handshake_options
+                ),
+                self._user_agent_header,
+            ]
         else:
-            self.headers = [_SpiceFlight._user_agent()]
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
-            )
+            self.headers = [self._user_agent_header]
+        self._flight_options = flight.FlightCallOptions(
+            headers=self.headers, timeout=DEFAULT_QUERY_TIMEOUT_SECS
+        )
+
+    def _call_options(self, timeout: float) -> flight.FlightCallOptions:
+        """Build call options for one query.
+
+        A per-call ``timeout`` must not leak into later queries, so it is never
+        stored on the client.
+        """
+        if timeout == DEFAULT_QUERY_TIMEOUT_SECS:
+            return self._flight_options
+        return flight.FlightCallOptions(headers=self.headers, timeout=timeout)
+
+    def _can_reauthenticate(self) -> bool:
+        # Only a Basic-handshake session token can expire and be renewed. A
+        # rejected Bearer key would just be resent unchanged, so it's final.
+        return bool(self._api_key) and not self._bearer_auth
+
+    def _with_reauth(self, call, timeout: int, deadline: float):
+        """Run a Flight call, renewing an expired Basic session once.
+
+        ``call`` takes the seconds left before ``deadline`` and builds its call
+        options from them, so a retry uses the new session token and the
+        renewal and retry together stay within the query's timeout.
+        """
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise flight.FlightTimedOutError("Query deadline exceeded")
+            return left
+
+        try:
+            try:
+                return call(remaining())
+            except flight.FlightUnauthenticatedError:
+                if not self._can_reauthenticate():
+                    raise
+                self._authenticate(remaining())
+                return call(remaining())
+        except flight.FlightTimedOutError as exc:
+            raise TimeoutError(
+                f"Query timed out and was canceled after {timeout} seconds."
+            ) from exc
 
     def query(self, query: str, **kwargs) -> flight.FlightStreamReader:
         timeout = kwargs.get("timeout")
 
-        if timeout is not None:
-            if not isinstance(timeout, int) or timeout <= 0:
-                raise ValueError("Timeout must be a positive integer")
-            self._flight_options = flight.FlightCallOptions(
-                headers=self.headers, timeout=timeout
-            )
+        if timeout is not None and (
+            not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0
+        ):
+            raise ValueError("Timeout must be a positive integer")
+        effective_timeout = DEFAULT_QUERY_TIMEOUT_SECS if timeout is None else timeout
 
-        flight_info = self._flight_client.get_flight_info(
-            flight.FlightDescriptor.for_command(query), self._flight_options
+        deadline = time.monotonic() + effective_timeout
+        descriptor = flight.FlightDescriptor.for_command(query)
+        flight_info = self._with_reauth(
+            lambda left: self._flight_client.get_flight_info(
+                descriptor, self._call_options(left)
+            ),
+            effective_timeout,
+            deadline,
         )
 
         # A well-behaved server always returns at least one endpoint to read
@@ -338,27 +451,25 @@ class _SpiceFlight:
             raise SpiceAIError(
                 "The query returned no Flight endpoint to read results from."
             )
+        ticket = flight_info.endpoints[0].ticket
 
-        try:
-            reader = self._threaded_flight_do_get(
-                ticket=flight_info.endpoints[0].ticket
-            )
-        except flight.FlightUnauthenticatedError:
-            self._authenticate()
-            reader = self._threaded_flight_do_get(
-                ticket=flight_info.endpoints[0].ticket
-            )
-        except flight.FlightTimedOutError as exc:
-            raise TimeoutError(
-                f"Query timed out and was canceled after {timeout} seconds."
-            ) from exc
-
+        # The whole query, including any session renewal and retry, stays
+        # within the caller's timeout.
+        reader = self._with_reauth(
+            lambda left: self._threaded_flight_do_get(ticket, self._call_options(left)),
+            effective_timeout,
+            deadline,
+        )
         return reader
 
-    def _threaded_flight_do_get(self, ticket: Ticket):
+    def _threaded_flight_do_get(
+        self, ticket: Ticket, flight_options: FlightCallOptions | None = None
+    ):
         thread = _ArrowFlightCallThread(
             ticket=ticket,
-            flight_options=self._flight_options,
+            flight_options=(
+                self._flight_options if flight_options is None else flight_options
+            ),
             flight_client=self._flight_client,
         )
         thread.start()
@@ -390,17 +501,19 @@ class Client:
                 f"provided together for mTLS. {missing} is missing."
             )
 
+        self.api_key = api_key
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
+        # Same key resolution (argument, then SPICE_API_KEY) as the ADBC and
+        # HTTP paths, so plain Flight queries don't go out unauthenticated.
         self._flight = _SpiceFlight(
             flight_url,
-            api_key or "",
+            self._api_key(),
             tls_root_certs,
             user_agent,
             tls_client_certificate=tls_client_certificate,
             tls_client_key=tls_client_key,
         )
 
-        self.api_key = api_key
         self._flight_url = flight_url
         self._user_agent = user_agent
         self._adbc_client: _ADBCClient | None = None
