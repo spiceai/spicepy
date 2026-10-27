@@ -73,9 +73,32 @@ class TestInferArrowType:
         """Test inference of empty bytes."""
         assert infer_arrow_type(b"") == pa.binary()
 
-    def test_infer_decimal(self) -> None:
-        """Test inference of Decimal."""
-        assert infer_arrow_type(Decimal("123.45")) == pa.decimal128(38, 9)
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("123.45", pa.decimal128(5, 2)),
+            ("-5", pa.decimal128(1, 0)),
+            ("0", pa.decimal128(1, 0)),
+            ("0.00", pa.decimal128(2, 2)),
+            # More than nine fractional digits, which decimal128(38, 9) rescaled away
+            ("0.0000000001", pa.decimal128(10, 10)),
+            # More than 29 integer digits, which decimal128(38, 9) overflowed
+            ("1E+30", pa.decimal128(31, 0)),
+            ("12345678901234567890123456789012", pa.decimal128(32, 0)),
+            ("1" * 39, pa.decimal256(39, 0)),
+        ],
+    )
+    def test_infer_decimal(self, value: str, expected: pa.DataType) -> None:
+        """A Decimal infers the precision and scale that hold it exactly."""
+        decimal = Decimal(value)
+        assert infer_arrow_type(decimal) == expected
+        assert param_array(decimal).to_pylist() == [decimal]
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "1" * 77])
+    def test_infer_decimal_unrepresentable(self, value: str) -> None:
+        """A Decimal no Arrow decimal can hold is rejected before binding."""
+        with pytest.raises(ValueError, match="Arrow decimal"):
+            infer_arrow_type(Decimal(value))
 
     def test_infer_datetime(self) -> None:
         """Test inference of datetime."""
