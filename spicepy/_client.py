@@ -75,6 +75,9 @@ DEFAULT_QUERY_TIMEOUT_SECS = 10 * 60
 # FlightSQL ADBC driver option that sends a fixed ``authorization`` header on
 # every call instead of doing a Basic-auth handshake.
 _ADBC_AUTHORIZATION_HEADER = "adbc.flight.sql.authorization_header"
+_ADBC_TLS_ROOT_CERTS = "adbc.flight.sql.client_option.tls_root_certs"
+_ADBC_MTLS_CERT_CHAIN = "adbc.flight.sql.client_option.mtls_cert_chain"
+_ADBC_MTLS_PRIVATE_KEY = "adbc.flight.sql.client_option.mtls_private_key"
 
 
 def _cloud_app_id(api_key: str | None) -> str | None:
@@ -154,7 +157,10 @@ class _ADBCClient:
         uri: str,
         api_key: str | None = None,
         user_agent: str | None = None,
-    ):
+        tls_root_certs: bytes | None = None,
+        tls_client_certificate: str | Path | None = None,
+        tls_client_key: str | Path | None = None,
+    ):  # pylint: disable=too-many-arguments,too-many-positional-arguments
         if not ADBC_AVAILABLE:
             raise ImportError(
                 "ADBC driver is not available. Install it with: pip install adbc-driver-flightsql adbc-driver-manager"
@@ -163,6 +169,9 @@ class _ADBCClient:
         self._uri = uri
         self._api_key = api_key
         self._user_agent = user_agent
+        self._tls_root_certs = tls_root_certs
+        self._tls_client_certificate = tls_client_certificate
+        self._tls_client_key = tls_client_key
         self._db: Any = None
         self._conn: Any = None
         self._init_connection()
@@ -188,6 +197,21 @@ class _ADBCClient:
             db_kwargs[adbc_driver_manager.DatabaseOptions.USERNAME.value] = ""
             db_kwargs[adbc_driver_manager.DatabaseOptions.PASSWORD.value] = (
                 self._api_key
+            )
+
+        # The same CA and client certificate as the Flight and HTTP paths. With
+        # no CA given, the Go driver keeps verifying against the system roots.
+        if self._tls_root_certs is not None:
+            db_kwargs[_ADBC_TLS_ROOT_CERTS] = self._tls_root_certs.decode()
+        if (
+            self._tls_client_certificate is not None
+            and self._tls_client_key is not None
+        ):
+            db_kwargs[_ADBC_MTLS_CERT_CHAIN] = Path(
+                self._tls_client_certificate
+            ).read_text(encoding="utf-8")
+            db_kwargs[_ADBC_MTLS_PRIVATE_KEY] = Path(self._tls_client_key).read_text(
+                encoding="utf-8"
             )
 
         # Create low-level database and connection (avoids dbapi autocommit warning)
@@ -503,6 +527,11 @@ class Client:
 
         self.api_key = api_key
         tls_root_certs = _Cert(tls_root_cert).tls_root_certs
+        # Only a CA the caller chose is forwarded to ADBC and HTTP; without one
+        # they keep their own defaults (system roots, certifi/REQUESTS_CA_BUNDLE).
+        self._tls_root_certs = tls_root_certs if tls_root_cert is not None else None
+        self._tls_client_certificate = tls_client_certificate
+        self._tls_client_key = tls_client_key
         # Same key resolution (argument, then SPICE_API_KEY) as the ADBC and
         # HTTP paths, so plain Flight queries don't go out unauthenticated.
         self._flight = _SpiceFlight(
@@ -522,6 +551,7 @@ class Client:
             self._headers(user_agent),
             tls_client_certificate=tls_client_certificate,
             tls_client_key=tls_client_key,
+            tls_root_cert=tls_root_cert,
         )
 
     def _headers(self, user_agent=None) -> dict[str, str]:
@@ -553,6 +583,9 @@ class Client:
                 uri=self._get_adbc_uri(),
                 api_key=self._api_key(),
                 user_agent=self._user_agent,
+                tls_root_certs=self._tls_root_certs,
+                tls_client_certificate=self._tls_client_certificate,
+                tls_client_key=self._tls_client_key,
             )
         return self._adbc_client
 

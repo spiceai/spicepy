@@ -206,6 +206,59 @@ jobs:
           echo "API-key-secured runtime did not become ready within 60 seconds"
           exit 1
 
+      # A third runtime serving TLS with a certificate from a throwaway private
+      # CA, for tests/test_integration_tls.py: every call must verify against
+      # tls_root_cert alone, not the system or certifi bundle. Throwaway
+      # certificates generated here, valid for one day, not secrets.
+      - name: Start TLS spice runtime with a private CA (Linux & macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p spice_tls/certs
+          cd spice_tls/certs
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 1 \
+            -subj "/CN=spicepy CI CA" \
+            -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+          openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
+          printf "subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n" > ext.cnf
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out server.pem -days 1 -extfile ext.cnf
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout wrongca.key -out wrongca.pem -days 1 -subj "/CN=spicepy CI wrong CA"
+          cd ..
+          cat > spicepod.yaml <<'YAML'
+          version: v1
+          kind: Spicepod
+          name: spicepy_tls
+          runtime:
+            auth:
+              api-key:
+                enabled: true
+                keys: [ "spicepy-tls-key:rw" ]
+            tls:
+              enabled: true
+              certificate_file: ./certs/server.pem
+              key_file: ./certs/server.key
+          datasets:
+            - from: memory:store
+              name: tls_mem
+              access: read_write
+          YAML
+          spiced --http 127.0.0.1:18443 --flight 127.0.0.1:50071 --metrics 127.0.0.1:19091 --node-bind-address 127.0.0.1:50072 &> spice.log &
+          for i in {1..60}; do
+            if curl -sf --cacert certs/ca.pem https://127.0.0.1:18443/v1/ready > /dev/null; then
+              echo "TLS runtime is ready"
+              echo "SPICE_TLS_FLIGHT_URL=grpc+tls://127.0.0.1:50071" >> "$GITHUB_ENV"
+              echo "SPICE_TLS_HTTP_URL=https://127.0.0.1:18443" >> "$GITHUB_ENV"
+              echo "SPICE_TLS_API_KEY=spicepy-tls-key" >> "$GITHUB_ENV"
+              echo "SPICE_TLS_ROOT_CERT=$PWD/certs/ca.pem" >> "$GITHUB_ENV"
+              echo "SPICE_TLS_WRONG_CA=$PWD/certs/wrongca.pem" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "Waiting for TLS runtime... ($i/60)"
+            sleep 1
+          done
+          cat spice.log
+          echo "TLS runtime did not become ready within 60 seconds"
+          exit 1
+
       - name: Init and start spice app (Windows)
         if: matrix.os == 'windows-latest'
         shell: wsl-bash {0}
@@ -308,7 +361,7 @@ jobs:
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
           TEST_SPICE_CLOUD: 'false'
         run: |
-          pytest -s tests/test_main.py tests/test_integration_local.py tests/test_integration_auth.py -k "not cloud"
+          pytest -s tests/test_main.py tests/test_integration_local.py tests/test_integration_auth.py tests/test_integration_tls.py -k "not cloud"
 
       - name: Stop spice and check logs
         working-directory: spice_qs
