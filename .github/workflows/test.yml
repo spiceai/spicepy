@@ -361,7 +361,18 @@ jobs:
           # run spice.ai cloud tests only on linux with single python version, to avoid concurrent requests
           TEST_SPICE_CLOUD: 'false'
         run: |
-          pytest -s tests/test_main.py tests/test_integration_local.py tests/test_integration_auth.py tests/test_integration_tls.py -k "not cloud"
+          pytest -s tests/test_main.py tests/test_integration_local.py tests/test_integration_auth.py -k "not cloud"
+
+      # The private-CA TLS tests run in their own process: run in the same pytest
+      # process as the suites above, the interpreter crashed (SIGSEGV) at exit
+      # after every test had passed. PYTHONFAULTHANDLER prints a native traceback
+      # if that still happens here.
+      - name: Running TLS tests (Linux & macOS)
+        if: matrix.os != 'windows-latest'
+        env:
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          pytest -s tests/test_integration_tls.py
 
       - name: Stop spice and check logs
         working-directory: spice_qs
