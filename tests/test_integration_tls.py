@@ -14,6 +14,7 @@ The module is skipped when the variables are unset.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import os
 import time
 from unittest.mock import patch
@@ -69,8 +70,14 @@ def _client(ca: str | None) -> Client:
 
 
 @pytest.fixture(name="client")
-def client_fixture() -> Client:
-    return _client(ROOT_CERT)
+def client_fixture() -> Iterator[Client]:
+    client = _client(ROOT_CERT)
+    yield client
+    # Close the ADBC connection here rather than leaving it to interpreter
+    # shutdown: a TLS ADBC (Go FlightSQL driver) connection still open at exit
+    # crashed the CI pytest process after every test had passed.
+    if client._adbc_client is not None:  # pylint: disable=protected-access
+        client._adbc_client.close()  # pylint: disable=protected-access
 
 
 # ============== Every transport verifies against tls_root_cert ==============
