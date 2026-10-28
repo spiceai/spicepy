@@ -57,7 +57,7 @@ client = Client(
 - **api_key** (str, optional): API key for authenticated endpoints. Falls back to the `SPICE_API_KEY` environment variable.
 - **flight_url** (str, optional): Arrow Flight endpoint. Defaults to `grpc://localhost:50051`. For Spice.ai Cloud, use the region-specific hostname `grpc+tls://<region>-prod-aws-flight.spiceai.io`.
 - **http_url** (str, optional): HTTP endpoint for control-plane operations (e.g. `refresh_dataset`). Defaults to `http://localhost:8090`. For Spice.ai Cloud, use `https://<region>-prod-aws-data.spiceai.io`.
-- **tls_root_cert** (Path or str, optional): Path to a TLS root certificate. Omit for automatic detection via `certifi`.
+- **tls_root_cert** (Path or str, optional): Path to a PEM CA certificate that signed the runtime's certificate. Used to verify the server on every transport: Flight queries, parameterized (ADBC) queries, and HTTP calls such as `refresh_dataset`, `is_ready`, `runtime_status`, and `search`. Omit to use the default trust store (`certifi` for HTTP, the system roots for Flight).
 - **tls_client_certificate** (Path or str, optional): Path to a PEM-encoded client certificate for mTLS. Must be provided together with `tls_client_key`.
 - **tls_client_key** (Path or str, optional): Path to a PEM-encoded client private key for mTLS. Must be provided together with `tls_client_certificate`.
 - **user_agent** (str, optional): Custom `User-Agent` prefix. Build a default with `spicepy.config.get_user_agent()`.
@@ -350,6 +350,8 @@ client = Client(
     tls_client_key="./certs/client.key",  #          ┘
 )
 ```
+
+`tls_root_cert` applies to every call the client makes, so there is no need to also set `REQUESTS_CA_BUNDLE`. If the runtime's certificate can't be verified, HTTP calls raise `spicepy.error.SpiceTLSError` straight away (no retries); it names the URL and the certificate problem, and is also a `requests.exceptions.SSLError`.
 
 `tls_client_certificate` and `tls_client_key` must be provided together; the client certificate is presented during the TLS handshake. The Spice runtime must be configured with `client_auth_mode: request` or `required`. See the [mTLS cookbook recipe](https://github.com/spiceai/cookbook/tree/trunk/mtls) for a complete walkthrough.
 
