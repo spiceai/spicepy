@@ -15,6 +15,7 @@ The module is skipped when the variables are unset.
 from __future__ import annotations
 
 from collections.abc import Iterator
+import importlib.util
 import os
 import time
 from unittest.mock import patch
@@ -40,12 +41,7 @@ pytestmark = [
     ),
 ]
 
-try:
-    import adbc_driver_manager  # noqa: F401  # pylint: disable=unused-import
-
-    HAS_ADBC = True
-except ImportError:  # pragma: no cover - the test extra installs ADBC
-    HAS_ADBC = False
+HAS_ADBC = importlib.util.find_spec("adbc_driver_manager") is not None
 
 requires_adbc = pytest.mark.skipif(not HAS_ADBC, reason="ADBC driver not installed")
 
