@@ -30,13 +30,38 @@ class RefreshOpts:
         }
 
 
+def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
+    """Find the certificate verification failure under the wrappers requests and
+    urllib3 add, or None when the TLS error is something else (e.g. the peer
+    closing the connection mid-handshake).
+    """
+    seen: set[int] = set()
+    pending: list[BaseException] = [exc]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return current
+        pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
+        reason = getattr(current, "reason", None)
+        if isinstance(reason, BaseException):
+            pending.append(reason)
+        for linked in (current.__cause__, current.__context__):
+            if linked is not None:
+                pending.append(linked)
+    return None
+
+
 class _Retry(Retry):
-    """Retry transient failures, but never a TLS failure.
+    """Retry transient failures, but not a certificate verification failure.
 
     urllib3 counts an SSL error against ``total`` like any other error, so an
     untrusted certificate was retried with backoff for about a minute before
     the caller heard about it. Certificate verification is deterministic: the
-    next attempt fails the same way.
+    next attempt fails the same way. Other TLS errors, such as an abrupt close
+    by a load balancer, can be transient and keep the normal retries.
     """
 
     def increment(  # type: ignore[override]  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -48,34 +73,9 @@ class _Retry(Retry):
         _pool=None,
         _stacktrace=None,
     ):
-        if isinstance(error, Urllib3SSLError):
+        if isinstance(error, Urllib3SSLError) and _certificate_error(error):
             raise MaxRetryError(_pool, url, error) from error
         return super().increment(method, url, response, error, _pool, _stacktrace)
-
-
-def _tls_failure_reason(exc: BaseException) -> str:
-    """Return the underlying certificate problem, e.g. "unable to get local issuer
-    certificate", from the chain of wrappers requests and urllib3 add.
-    """
-    seen: set[int] = set()
-    pending: list[BaseException] = [exc]
-    while pending:
-        current = pending.pop()
-        if id(current) in seen:
-            continue
-        seen.add(id(current))
-        if isinstance(current, ssl.SSLCertVerificationError) and current.verify_message:
-            return f"certificate verify failed: {current.verify_message}"
-        if isinstance(current, ssl.SSLError) and current.reason:
-            return str(current.reason)
-        pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
-        reason = getattr(current, "reason", None)
-        if isinstance(reason, BaseException):
-            pending.append(reason)
-        for linked in (current.__cause__, current.__context__):
-            if linked is not None:
-                pending.append(linked)
-    return str(exc)
 
 
 HttpMethod = Literal["GET", "POST", "PUT", "HEAD", "DELETE"]
@@ -258,12 +258,16 @@ class HttpRequests:
     def _call(self, operation: Callable[..., Response], url: str, **kwargs) -> Response:
         """Send one request, verifying TLS against the configured CA.
 
-        A certificate failure raises `SpiceTLSError` naming the URL and the
-        reason, rather than a raw ``requests`` exception.
+        A certificate verification failure raises `SpiceTLSError` naming the URL
+        and the reason, rather than a raw ``requests`` exception. Other TLS
+        errors are retried as before and re-raised unchanged.
         """
         try:
             return operation(url=url, verify=self.verify, **kwargs)
         except requests.exceptions.SSLError as exc:
+            cert_error = _certificate_error(exc)
+            if cert_error is None:
+                raise
             hint = (
                 f"check that tls_root_cert ({self.verify}) is the CA that signed "
                 "the runtime's certificate"
@@ -273,7 +277,8 @@ class HttpRequests:
             )
             raise SpiceTLSError(
                 f"TLS certificate verification failed for {url}: "
-                f"{_tls_failure_reason(exc)}; {hint}"
+                f"certificate verify failed: {cert_error.verify_message or cert_error}; "
+                f"{hint}"
             ) from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:

@@ -10,6 +10,7 @@ minute before surfacing as a raw ``requests`` exception.
 from __future__ import annotations
 
 from pathlib import Path
+import ssl
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -73,6 +74,15 @@ def test_client_passes_root_cert_to_http(ca_file: Path) -> None:
 # ============== HTTP: certificate failures are final ==============
 
 
+def _cert_failure() -> Urllib3SSLError:
+    """A certificate failure wrapped the way urllib3 wraps it."""
+    cause = ssl.SSLCertVerificationError(
+        1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed"
+    )
+    cause.verify_message = "self-signed certificate in certificate chain"
+    return Urllib3SSLError(cause)
+
+
 def test_certificate_failure_is_not_retried() -> None:
     retry = (
         HttpRequests("https://spice:8090", {})
@@ -83,8 +93,30 @@ def test_certificate_failure_is_not_retried() -> None:
         retry.increment(
             method="GET",
             url="/v1/ready",
-            error=Urllib3SSLError("certificate verify failed"),
+            error=_cert_failure(),
         )
+
+
+def test_transient_tls_error_still_retries() -> None:
+    """An abrupt close mid-handshake isn't a certificate problem; retry it."""
+    retry = (
+        HttpRequests("https://spice:8090", {})
+        .session.get_adapter("https://spice:8090")
+        .max_retries
+    )
+    eof = Urllib3SSLError(ssl.SSLEOFError(8, "EOF occurred in violation of protocol"))
+    assert retry.increment(method="GET", url="/v1/ready", error=eof)
+
+
+def test_transient_tls_error_is_not_reported_as_certificate_failure() -> None:
+    http = HttpRequests("https://spice:8090", {})
+    failure = requests.exceptions.SSLError(
+        Urllib3SSLError(ssl.SSLEOFError(8, "EOF occurred in violation of protocol"))
+    )
+    with patch.object(http.session, "request", side_effect=failure):
+        with pytest.raises(requests.exceptions.SSLError) as raised:
+            http.send_request_raw("GET", "/v1/ready")
+    assert not isinstance(raised.value, SpiceTLSError)
 
 
 def test_transient_errors_still_retry() -> None:
@@ -101,10 +133,7 @@ def test_transient_errors_still_retry() -> None:
 
 def test_certificate_failure_raises_spice_tls_error() -> None:
     http = HttpRequests("https://spice:8090", {})
-    failure = requests.exceptions.SSLError(
-        "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
-        "self-signed certificate in certificate chain"
-    )
+    failure = requests.exceptions.SSLError(_cert_failure())
     with patch.object(http.session, "request", side_effect=failure):
         with pytest.raises(SpiceTLSError) as raised:
             http.send_request_raw("GET", "/v1/ready")
