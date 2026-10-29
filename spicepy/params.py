@@ -39,7 +39,8 @@ def infer_arrow_type(value: Any) -> pa.DataType:
     - float → float64
     - str → string
     - bytes → binary
-    - Decimal → decimal128(38, 9)
+    - Decimal → decimal128 with the value's own precision and scale
+      (Decimal("123.45") → decimal128(5, 2)), or decimal256 past 38 digits
     - datetime → timestamp("us")
     - date → date32
     - time → time64("us")
@@ -60,6 +61,8 @@ def infer_arrow_type(value: Any) -> pa.DataType:
 
     Raises:
         TypeError: If the type cannot be inferred
+        ValueError: If ``value`` is a Decimal no Arrow decimal can hold
+            (NaN, Infinity, or more than 76 digits)
     """
     return _normalize(value)[1]
 
@@ -195,7 +198,7 @@ def _infer_python_type(value: Any) -> pa.DataType:
     if isinstance(value, bytes):
         return pa.binary()
     if isinstance(value, Decimal):
-        return pa.decimal128(38, 9)
+        return _decimal_type(value)
     if isinstance(value, datetime):
         return pa.timestamp("us", tz=None)
     if isinstance(value, date):
@@ -206,3 +209,27 @@ def _infer_python_type(value: Any) -> pa.DataType:
         return pa.duration("us")
 
     raise TypeError(f"Unsupported parameter type: {type(value).__name__}")
+
+
+def _decimal_type(value: Decimal) -> pa.DataType:
+    """Return the narrowest Arrow decimal that holds ``value`` exactly.
+
+    A fixed decimal128(38, 9) rejects a value with more than nine fractional
+    digits or more than 29 integer digits, so the precision and scale come
+    from the value itself, as ``pa.array`` infers them.
+    """
+    if not value.is_finite():
+        raise ValueError(
+            f"{value} has no Arrow decimal representation; bind it as a float"
+        )
+    _, digits, exponent = value.as_tuple()
+    assert isinstance(exponent, int)  # only NaN and Infinity have a str exponent
+    scale = max(-exponent, 0)
+    precision = max(len(digits) + max(exponent, 0), scale, 1)
+    if precision <= 38:
+        return pa.decimal128(precision, scale)
+    if precision <= 76:
+        return pa.decimal256(precision, scale)
+    raise ValueError(
+        f"{value} has {precision} digits; an Arrow decimal holds at most 76"
+    )
