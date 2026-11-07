@@ -3,13 +3,17 @@ from dataclasses import dataclass
 import datetime
 import json
 from pathlib import Path
+import ssl
 from typing import Any, Literal
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
+import requests.exceptions
+from urllib3.exceptions import MaxRetryError
+from urllib3.exceptions import SSLError as Urllib3SSLError
 
 from .config import SPICE_USER_AGENT
-from .error import SpiceAIError
+from .error import SpiceAIError, SpiceTLSError
 
 
 @dataclass
@@ -24,6 +28,54 @@ class RefreshOpts:
             "refresh_mode": self.refresh_mode,
             "refresh_jitter_max": self.refresh_jitter_max,
         }
+
+
+def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
+    """Find the certificate verification failure under the wrappers requests and
+    urllib3 add, or None when the TLS error is something else (e.g. the peer
+    closing the connection mid-handshake).
+    """
+    seen: set[int] = set()
+    pending: list[BaseException] = [exc]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return current
+        pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
+        reason = getattr(current, "reason", None)
+        if isinstance(reason, BaseException):
+            pending.append(reason)
+        for linked in (current.__cause__, current.__context__):
+            if linked is not None:
+                pending.append(linked)
+    return None
+
+
+class _Retry(Retry):
+    """Retry transient failures, but not a certificate verification failure.
+
+    urllib3 counts an SSL error against ``total`` like any other error, so an
+    untrusted certificate was retried with backoff for about a minute before
+    the caller heard about it. Certificate verification is deterministic: the
+    next attempt fails the same way. Other TLS errors, such as an abrupt close
+    by a load balancer, can be transient and keep the normal retries.
+    """
+
+    def increment(  # type: ignore[override]  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        method=None,
+        url=None,
+        response=None,
+        error=None,
+        _pool=None,
+        _stacktrace=None,
+    ):
+        if isinstance(error, Urllib3SSLError) and _certificate_error(error):
+            raise MaxRetryError(_pool, url, error) from error
+        return super().increment(method, url, response, error, _pool, _stacktrace)
 
 
 HttpMethod = Literal["GET", "POST", "PUT", "HEAD", "DELETE"]
@@ -73,8 +125,17 @@ class HttpRequests:
         headers: dict[str, str],
         tls_client_certificate: str | Path | None = None,
         tls_client_key: str | Path | None = None,
+        tls_root_cert: str | Path | None = None,
     ) -> None:
         self.session = self._create_session(headers)
+
+        # Verify the runtime against the caller's CA when one is given, else
+        # against the default bundle (certifi, or REQUESTS_CA_BUNDLE). Passed on
+        # each request rather than set as session.verify, which requests lets
+        # REQUESTS_CA_BUNDLE override.
+        self.verify: str | bool = (
+            str(tls_root_cert) if tls_root_cert is not None else True
+        )
 
         # set the user-agent header
         if "user-agent" not in self.session.headers:
@@ -101,11 +162,11 @@ class HttpRequests:
 
         headers.update(self.session.headers)
 
-        response: Response = self._operation(method)(  # type: ignore[call-arg]
+        response: Response = self._call(
+            self._operation(method),
             url=f"{self.base_url}{path}",
             data=body,
             params=self.prepare_param(param.copy()) if param is not None else None,
-            verify=True,
             headers=headers,
         )
         raise_for_runtime_error(response, path)
@@ -156,10 +217,10 @@ class HttpRequests:
         if accept is not None:
             headers["Accept"] = accept
 
-        response: Response = self.session.post(
+        response: Response = self._call(
+            self.session.post,
             url=f"{self.base_url}{path}",
             data=json.dumps(payload),
-            verify=True,
             headers=headers,
         )
 
@@ -186,13 +247,39 @@ class HttpRequests:
         merged_headers = dict(headers) if headers is not None else {}
         merged_headers.update(self.session.headers)
 
-        return self._operation(method)(  # type: ignore[call-arg]
+        return self._call(
+            self._operation(method),
             url=f"{self.base_url}{path}",
             data=body,
             params=self.prepare_param(param.copy()) if param is not None else None,
-            verify=True,
             headers=merged_headers,
         )
+
+    def _call(self, operation: Callable[..., Response], url: str, **kwargs) -> Response:
+        """Send one request, verifying TLS against the configured CA.
+
+        A certificate verification failure raises `SpiceTLSError` naming the URL
+        and the reason, rather than a raw ``requests`` exception. Other TLS
+        errors are retried as before and re-raised unchanged.
+        """
+        try:
+            return operation(url=url, verify=self.verify, **kwargs)
+        except requests.exceptions.SSLError as exc:
+            cert_error = _certificate_error(exc)
+            if cert_error is None:
+                raise
+            hint = (
+                f"check that tls_root_cert ({self.verify}) is the CA that signed "
+                "the runtime's certificate"
+                if isinstance(self.verify, str)
+                else "pass tls_root_cert=<path to the CA that signed the "
+                "runtime's certificate>"
+            )
+            raise SpiceTLSError(
+                f"TLS certificate verification failed for {url}: "
+                f"certificate verify failed: {cert_error.verify_message or cert_error}; "
+                f"{hint}"
+            ) from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():
@@ -223,7 +310,7 @@ class HttpRequests:
         sess.mount(
             "https://",
             HTTPAdapter(
-                max_retries=Retry(
+                max_retries=_Retry(
                     total=5,
                     backoff_factor=2,
                     # Only retry 500s on GET so we don't unintentionally mutate data

@@ -375,6 +375,9 @@ class TestClientQueryWithParams:
             uri="grpc://localhost:50051",
             api_key="",
             user_agent="custom-agent",
+            tls_root_certs=None,
+            tls_client_certificate=None,
+            tls_client_key=None,
         )
 
 
