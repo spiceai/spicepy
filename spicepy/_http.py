@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 import datetime
 import json
@@ -13,7 +13,7 @@ from urllib3.exceptions import MaxRetryError
 from urllib3.exceptions import SSLError as Urllib3SSLError
 
 from .config import SPICE_USER_AGENT
-from .error import SpiceAIError, SpiceTLSError
+from .error import SpiceAIError, SpiceConnectionError, SpiceTLSError
 
 
 @dataclass
@@ -30,10 +30,9 @@ class RefreshOpts:
         }
 
 
-def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
-    """Find the certificate verification failure under the wrappers requests and
-    urllib3 add, or None when the TLS error is something else (e.g. the peer
-    closing the connection mid-handshake).
+def _causes(exc: BaseException) -> Iterator[BaseException]:
+    """Yield ``exc`` and every exception wrapped under it by requests and urllib3
+    (in ``args``, ``reason``, ``__cause__`` and ``__context__``), each once.
     """
     seen: set[int] = set()
     pending: list[BaseException] = [exc]
@@ -42,8 +41,7 @@ def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | Non
         if id(current) in seen:
             continue
         seen.add(id(current))
-        if isinstance(current, ssl.SSLCertVerificationError):
-            return current
+        yield current
         pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
         reason = getattr(current, "reason", None)
         if isinstance(reason, BaseException):
@@ -51,7 +49,28 @@ def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | Non
         for linked in (current.__cause__, current.__context__):
             if linked is not None:
                 pending.append(linked)
+
+
+def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
+    """Find the certificate verification failure under the wrappers requests and
+    urllib3 add, or None when the TLS error is something else (e.g. the peer
+    closing the connection mid-handshake).
+    """
+    for current in _causes(exc):
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return current
     return None
+
+
+def _connection_failure_reason(exc: BaseException) -> str:
+    """Return the operating system's reason a connection failed ("Connection
+    refused", a DNS lookup failure), or the exception's own text when no OS
+    error is wrapped under it.
+    """
+    for current in _causes(exc):
+        if isinstance(current, OSError) and current.strerror:
+            return current.strerror
+    return str(exc)
 
 
 class _Retry(Retry):
@@ -260,7 +279,9 @@ class HttpRequests:
 
         A certificate verification failure raises `SpiceTLSError` naming the URL
         and the reason, rather than a raw ``requests`` exception. Other TLS
-        errors are retried as before and re-raised unchanged.
+        errors are retried as before and re-raised unchanged. A runtime that
+        cannot be reached (connection refused, unknown host, connect timeout)
+        raises `SpiceConnectionError` once the retries are spent.
         """
         try:
             return operation(url=url, verify=self.verify, **kwargs)
@@ -279,6 +300,12 @@ class HttpRequests:
                 f"TLS certificate verification failed for {url}: "
                 f"certificate verify failed: {cert_error.verify_message or cert_error}; "
                 f"{hint}"
+            ) from exc
+        except requests.exceptions.ConnectionError as exc:
+            raise SpiceConnectionError(
+                f"could not reach the Spice runtime at {url}: "
+                f"{_connection_failure_reason(exc)}; check that the runtime is "
+                f"running and that http_url ({self.base_url}) is its HTTP address"
             ) from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:

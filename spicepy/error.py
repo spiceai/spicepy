@@ -17,3 +17,13 @@ class SpiceTLSError(SpiceAIError, requests.exceptions.SSLError):
     become trusted on a later attempt. Also a ``requests.exceptions.SSLError``,
     so code that already catches that keeps working.
     """
+
+
+class SpiceConnectionError(SpiceAIError, requests.exceptions.ConnectionError):
+    """The runtime's HTTP endpoint could not be reached.
+
+    Raised when a connection is refused, the host cannot be resolved, or the
+    connection attempt times out, after any configured retries. Also a
+    ``requests.exceptions.ConnectionError``, so code that already catches that
+    keeps working.
+    """
