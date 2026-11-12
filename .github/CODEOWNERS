@@ -19,3 +19,6 @@
 
 # Build configuration
 /pyproject.toml @spiceai/sdk-team
+
+# The Actions lockfile pins every action our workflows run; changes need owner review.
+/.github/workflows/actions.lock @spiceai/platform-team @spiceai/sdk-team @spiceai/spice-core-maintainers
