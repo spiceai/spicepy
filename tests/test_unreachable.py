@@ -15,8 +15,18 @@ import pytest
 import requests
 
 from spicepy import Client
-from spicepy._http import HttpRequests
+from spicepy._http import HttpRequests, _causes
 from spicepy.error import SpiceAIError, SpiceConnectionError
+
+
+@pytest.fixture(autouse=True)
+def _no_env_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep requests from sending these requests to a proxy named in the
+    environment, so the connection attempts and the DNS lookup happen locally.
+    """
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(name.lower(), raising=False)
 
 
 @pytest.fixture(name="refused_url")
@@ -62,8 +72,17 @@ def test_unreachable_runtime_raises_spice_connection_error(
     assert isinstance(error, SpiceAIError)
     assert isinstance(error, requests.exceptions.ConnectionError)
     assert refused_url in str(error)
-    assert "Connection refused" in str(error)
     assert "http_url" in str(error)
+    # The operating system's own reason, whose wording differs by platform
+    # ("Connection refused" on Linux and macOS, "No connection could be made
+    # because the target machine actively refused it" on Windows).
+    refused = next(
+        cause
+        for cause in _causes(error.__cause__)
+        if isinstance(cause, ConnectionRefusedError)
+    )
+    assert refused.strerror
+    assert refused.strerror in str(error)
 
 
 def test_unresolvable_host_names_the_lookup_failure() -> None:
