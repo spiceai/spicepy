@@ -111,3 +111,33 @@ def test_connect_timeout_stays_a_requests_timeout() -> None:
     assert isinstance(error, requests.exceptions.ConnectTimeout)
     assert isinstance(error, requests.exceptions.Timeout)
     assert "connect timed out" in str(error)
+
+
+def test_error_text_leaves_out_url_credentials(refused_url: str) -> None:
+    with_credentials = refused_url.replace(
+        "http://", "http://review-user:review-secret@"
+    )
+    http = HttpRequests(with_credentials, {})
+
+    with pytest.raises(SpiceConnectionError) as raised:
+        http.send_request_raw("GET", "/v1/ready")
+
+    text = str(raised.value)
+    assert "review-user" not in text
+    assert "review-secret" not in text
+    assert f"{refused_url}/v1/ready" in text
+
+
+def test_proxy_failure_is_raised_unchanged() -> None:
+    http = HttpRequests("http://127.0.0.1:8090", {})
+    proxy_error = requests.exceptions.ProxyError("Unable to connect to proxy")
+
+    def through_proxy(**_: Any) -> requests.Response:
+        raise proxy_error
+
+    http.session.get = through_proxy  # type: ignore[method-assign]
+
+    with pytest.raises(requests.exceptions.ProxyError) as raised:
+        http.send_request_raw("GET", "/v1/ready")
+
+    assert raised.value is proxy_error

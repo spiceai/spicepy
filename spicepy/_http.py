@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import ssl
 from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
@@ -65,6 +66,14 @@ def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | Non
         if isinstance(current, ssl.SSLCertVerificationError):
             return current
     return None
+
+
+def _without_userinfo(url: str) -> str:
+    """The URL with any ``user:password@`` removed, safe to put in an error."""
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
 
 
 def _connection_failure_reason(exc: BaseException) -> str:
@@ -286,7 +295,9 @@ class HttpRequests:
         and the reason, rather than a raw ``requests`` exception. Other TLS
         errors are retried as before and re-raised unchanged. A runtime that
         cannot be reached (connection refused, unknown host, connect timeout)
-        raises `SpiceConnectionError` once the retries are spent.
+        raises `SpiceConnectionError` once the retries are spent. A failure to
+        reach a configured proxy is re-raised unchanged. Error messages never
+        include the ``user:password@`` part of a URL.
         """
         try:
             return operation(url=url, verify=self.verify, **kwargs)
@@ -302,10 +313,12 @@ class HttpRequests:
                 "runtime's certificate>"
             )
             raise SpiceTLSError(
-                f"TLS certificate verification failed for {url}: "
+                f"TLS certificate verification failed for {_without_userinfo(url)}: "
                 f"certificate verify failed: {cert_error.verify_message or cert_error}; "
                 f"{hint}"
             ) from exc
+        except requests.exceptions.ProxyError:
+            raise
         except requests.exceptions.ConnectionError as exc:
             error_type = (
                 SpiceConnectTimeoutError
@@ -313,9 +326,10 @@ class HttpRequests:
                 else SpiceConnectionError
             )
             raise error_type(
-                f"could not reach the Spice runtime at {url}: "
+                f"could not reach the Spice runtime at {_without_userinfo(url)}: "
                 f"{_connection_failure_reason(exc)}; check that the runtime is "
-                f"running and that http_url ({self.base_url}) is its HTTP address"
+                f"running and that http_url ({_without_userinfo(self.base_url)}) is its "
+                "HTTP address"
             ) from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
