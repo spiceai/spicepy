@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import socket
+import threading
 from typing import Any
 
 import pytest
@@ -141,3 +142,27 @@ def test_proxy_failure_is_raised_unchanged() -> None:
         http.send_request_raw("GET", "/v1/ready")
 
     assert raised.value is proxy_error
+
+
+def test_connection_dropped_after_the_request_is_raised_unchanged() -> None:
+    received: list[bytes] = []
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+
+        def accept_then_close() -> None:
+            conn, _ = server.accept()
+            with conn:
+                received.append(conn.recv(65536))
+
+        thread = threading.Thread(target=accept_then_close, daemon=True)
+        thread.start()
+        http = HttpRequests(f"http://127.0.0.1:{port}", {})
+
+        with pytest.raises(requests.exceptions.ConnectionError) as raised:
+            http.send_request_raw("POST", "/v1/queries", body="SELECT 1")
+        thread.join(timeout=5)
+
+    assert received and received[0].startswith(b"POST /v1/queries")
+    assert not isinstance(raised.value, SpiceConnectionError)

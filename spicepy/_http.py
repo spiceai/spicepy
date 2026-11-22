@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 import requests.exceptions
+from urllib3.exceptions import ConnectTimeoutError as Urllib3ConnectTimeoutError
 from urllib3.exceptions import MaxRetryError
 from urllib3.exceptions import SSLError as Urllib3SSLError
 
@@ -74,6 +75,19 @@ def _without_userinfo(url: str) -> str:
     if "@" not in parts.netloc:
         return url
     return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
+
+
+def _failed_to_connect(exc: BaseException) -> bool:
+    """Whether the connection itself failed (refused, unknown host, connect
+    timeout), so no request reached the runtime. A connection dropped after the
+    request was sent is not this: the runtime may have acted on it.
+    """
+    return any(
+        isinstance(
+            cause, (Urllib3ConnectTimeoutError, requests.exceptions.ConnectTimeout)
+        )
+        for cause in _causes(exc)
+    )
 
 
 def _connection_failure_reason(exc: BaseException) -> str:
@@ -295,8 +309,9 @@ class HttpRequests:
         and the reason, rather than a raw ``requests`` exception. Other TLS
         errors are retried as before and re-raised unchanged. A runtime that
         cannot be reached (connection refused, unknown host, connect timeout)
-        raises `SpiceConnectionError` once the retries are spent. A failure to
-        reach a configured proxy is re-raised unchanged. Error messages never
+        raises `SpiceConnectionError` once the retries are spent. A connection
+        that drops after the request was sent, and a failure to reach a
+        configured proxy, are re-raised unchanged. Error messages never
         include the ``user:password@`` part of a URL.
         """
         try:
@@ -320,6 +335,8 @@ class HttpRequests:
         except requests.exceptions.ProxyError:
             raise
         except requests.exceptions.ConnectionError as exc:
+            if not _failed_to_connect(exc):
+                raise
             error_type = (
                 SpiceConnectTimeoutError
                 if isinstance(exc, requests.exceptions.ConnectTimeout)
