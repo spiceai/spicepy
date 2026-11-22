@@ -441,6 +441,29 @@ if not client.is_ready():
     print("runtime is not ready yet")
 ```
 
+A runtime that isn't listening yet can't answer at all, so every HTTP method, `is_ready()`
+included, raises `spicepy.error.SpiceConnectionError` (a `SpiceAIError`, and also a
+`requests.exceptions.ConnectionError`) naming the URL it tried. A connection attempt that
+times out raises its subclass `spicepy.error.SpiceConnectTimeoutError`, which is also a
+`requests.exceptions.ConnectTimeout`:
+
+```python
+import time
+
+from spicepy.error import SpiceConnectionError
+
+while True:
+    try:
+        if client.is_ready():
+            break
+    except SpiceConnectionError as err:
+        print(err)
+        # Spice AI error: could not reach the Spice runtime at
+        # http://127.0.0.1:8090/v1/ready: Connection refused; check that the runtime
+        # is running and that http_url (http://127.0.0.1:8090) is its HTTP address
+    time.sleep(1)
+```
+
 When you need to know *which* component is not ready, `runtime_status()` reports each
 runtime connection separately:
 
