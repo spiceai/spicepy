@@ -16,7 +16,7 @@ import pytest
 import requests
 
 from spicepy import Client
-from spicepy._http import HttpRequests, _causes
+from spicepy._http import HttpRequests, _causes, _without_userinfo
 from spicepy.error import SpiceAIError, SpiceConnectionError, SpiceConnectTimeoutError
 
 
@@ -196,3 +196,30 @@ def test_a_retry_inside_the_handler_is_classified_on_its_own(
 
     assert received and received[0].startswith(b"POST /v1/queries")
     assert not isinstance(raised.value, SpiceConnectionError)
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        (
+            "http://user:pa[ss]@127.0.0.1:8090/v1/ready",
+            "http://127.0.0.1:8090/v1/ready",
+        ),
+        ("https://u:p@w@host:443/a?b=c@d", "https://host:443/a?b=c@d"),
+        ("http://127.0.0.1:8090/v1/ready", "http://127.0.0.1:8090/v1/ready"),
+        ("http://user@[::1]:8090", "http://[::1]:8090"),
+    ],
+)
+def test_without_userinfo(url: str, expected: str) -> None:
+    assert _without_userinfo(url) == expected
+
+
+def test_bracketed_credentials_still_raise_spice_connection_error(
+    refused_url: str,
+) -> None:
+    http = HttpRequests(refused_url.replace("http://", "http://user:pa[ss]@"), {})
+
+    with pytest.raises(SpiceConnectionError) as raised:
+        http.send_request_raw("GET", "/v1/ready")
+
+    assert "pa[ss]" not in str(raised.value)

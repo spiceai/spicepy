@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import ssl
 from typing import Any, Literal
-from urllib.parse import urlsplit, urlunsplit
 
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
@@ -70,11 +69,19 @@ def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | Non
 
 
 def _without_userinfo(url: str) -> str:
-    """The URL with any ``user:password@`` removed, safe to put in an error."""
-    parts = urlsplit(url)
-    if "@" not in parts.netloc:
+    """The URL with any ``user:password@`` removed, safe to put in an error.
+
+    Splits on characters alone rather than with ``urlsplit``, which rejects
+    some credentials that requests accepts (such as ``pa[ss]``).
+    """
+    scheme, sep, rest = url.partition("://")
+    if not sep:
         return url
-    return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
+    end = min((i for i in map(rest.find, "/?#") if i >= 0), default=len(rest))
+    authority = rest[:end]
+    if "@" not in authority:
+        return url
+    return f"{scheme}://{authority.rpartition('@')[2]}{rest[end:]}"
 
 
 def _failed_to_connect(exc: requests.exceptions.ConnectionError) -> bool:
