@@ -13,7 +13,12 @@ from urllib3.exceptions import MaxRetryError
 from urllib3.exceptions import SSLError as Urllib3SSLError
 
 from .config import SPICE_USER_AGENT
-from .error import SpiceAIError, SpiceConnectionError, SpiceTLSError
+from .error import (
+    SpiceAIError,
+    SpiceConnectionError,
+    SpiceConnectTimeoutError,
+    SpiceTLSError,
+)
 
 
 @dataclass
@@ -302,7 +307,12 @@ class HttpRequests:
                 f"{hint}"
             ) from exc
         except requests.exceptions.ConnectionError as exc:
-            raise SpiceConnectionError(
+            error_type = (
+                SpiceConnectTimeoutError
+                if isinstance(exc, requests.exceptions.ConnectTimeout)
+                else SpiceConnectionError
+            )
+            raise error_type(
                 f"could not reach the Spice runtime at {url}: "
                 f"{_connection_failure_reason(exc)}; check that the runtime is "
                 f"running and that http_url ({self.base_url}) is its HTTP address"

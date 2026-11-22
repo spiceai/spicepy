@@ -443,7 +443,9 @@ if not client.is_ready():
 
 A runtime that isn't listening yet can't answer at all, so every HTTP method, `is_ready()`
 included, raises `spicepy.error.SpiceConnectionError` (a `SpiceAIError`, and also a
-`requests.exceptions.ConnectionError`) naming the URL it tried:
+`requests.exceptions.ConnectionError`) naming the URL it tried. A connection attempt that
+times out raises its subclass `spicepy.error.SpiceConnectTimeoutError`, which is also a
+`requests.exceptions.ConnectTimeout`:
 
 ```python
 import time

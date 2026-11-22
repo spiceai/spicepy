@@ -27,3 +27,14 @@ class SpiceConnectionError(SpiceAIError, requests.exceptions.ConnectionError):
     ``requests.exceptions.ConnectionError``, so code that already catches that
     keeps working.
     """
+
+
+class SpiceConnectTimeoutError(
+    SpiceConnectionError, requests.exceptions.ConnectTimeout
+):
+    """The connection attempt to the runtime's HTTP endpoint timed out.
+
+    A ``SpiceConnectionError`` that is also a ``requests.exceptions.ConnectTimeout``
+    (and so a ``requests.exceptions.Timeout``), so code that already catches
+    either keeps working.
+    """

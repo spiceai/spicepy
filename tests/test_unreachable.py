@@ -16,7 +16,7 @@ import requests
 
 from spicepy import Client
 from spicepy._http import HttpRequests, _causes
-from spicepy.error import SpiceAIError, SpiceConnectionError
+from spicepy.error import SpiceAIError, SpiceConnectionError, SpiceConnectTimeoutError
 
 
 @pytest.fixture(autouse=True)
@@ -93,3 +93,21 @@ def test_unresolvable_host_names_the_lookup_failure() -> None:
 
     assert "spice-runtime.invalid" in str(raised.value)
     assert isinstance(raised.value.__cause__, requests.exceptions.ConnectionError)
+
+
+def test_connect_timeout_stays_a_requests_timeout() -> None:
+    http = HttpRequests("http://127.0.0.1:8090", {})
+
+    def timed_out(**_: Any) -> requests.Response:
+        raise requests.exceptions.ConnectTimeout("connect timed out")
+
+    http.session.get = timed_out  # type: ignore[method-assign]
+
+    with pytest.raises(SpiceConnectTimeoutError) as raised:
+        http.send_request_raw("GET", "/v1/ready")
+
+    error = raised.value
+    assert isinstance(error, SpiceConnectionError)
+    assert isinstance(error, requests.exceptions.ConnectTimeout)
+    assert isinstance(error, requests.exceptions.Timeout)
+    assert "connect timed out" in str(error)
