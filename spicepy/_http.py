@@ -353,12 +353,15 @@ class HttpRequests:
                 if isinstance(exc, requests.exceptions.ConnectTimeout)
                 else SpiceConnectionError
             )
-            raise error_type(
+            error = error_type(
                 f"could not reach the Spice runtime at {_without_userinfo(url)}: "
                 f"{_connection_failure_reason(exc)}; check that the runtime is "
                 f"running and that http_url ({_without_userinfo(self.base_url)}) is its "
                 "HTTP address"
-            ) from exc
+            )
+            error.request = exc.request
+            error.response = exc.response
+            raise error from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():

@@ -223,3 +223,30 @@ def test_bracketed_credentials_still_raise_spice_connection_error(
         http.send_request_raw("GET", "/v1/ready")
 
     assert "pa[ss]" not in str(raised.value)
+
+
+def test_wrapped_errors_keep_the_failed_request(refused_url: str) -> None:
+    http = HttpRequests(refused_url, {})
+
+    with pytest.raises(SpiceConnectionError) as raised:
+        http.send_request_raw("POST", "/v1/queries", body="SELECT 1")
+
+    request = raised.value.request
+    assert request is not None
+    assert request.method == "POST"
+    assert request.url == f"{refused_url}/v1/queries"
+
+
+def test_connect_timeout_keeps_the_failed_request() -> None:
+    http = HttpRequests("http://127.0.0.1:8090", {})
+    sent = requests.Request("GET", "http://127.0.0.1:8090/v1/ready").prepare()
+
+    def timed_out(**_: Any) -> requests.Response:
+        raise requests.exceptions.ConnectTimeout("connect timed out", request=sent)
+
+    http.session.get = timed_out  # type: ignore[method-assign]
+
+    with pytest.raises(SpiceConnectTimeoutError) as raised:
+        http.send_request_raw("GET", "/v1/ready")
+
+    assert raised.value.request is sent
