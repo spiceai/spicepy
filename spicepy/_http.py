@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 import datetime
 import json
@@ -9,11 +9,17 @@ from typing import Any, Literal
 from requests import Response, Session
 from requests.adapters import HTTPAdapter, Retry
 import requests.exceptions
+from urllib3.exceptions import ConnectTimeoutError as Urllib3ConnectTimeoutError
 from urllib3.exceptions import MaxRetryError
 from urllib3.exceptions import SSLError as Urllib3SSLError
 
 from .config import SPICE_USER_AGENT
-from .error import SpiceAIError, SpiceTLSError
+from .error import (
+    SpiceAIError,
+    SpiceConnectionError,
+    SpiceConnectTimeoutError,
+    SpiceTLSError,
+)
 
 
 @dataclass
@@ -30,10 +36,9 @@ class RefreshOpts:
         }
 
 
-def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
-    """Find the certificate verification failure under the wrappers requests and
-    urllib3 add, or None when the TLS error is something else (e.g. the peer
-    closing the connection mid-handshake).
+def _causes(exc: BaseException) -> Iterator[BaseException]:
+    """Yield ``exc`` and every exception wrapped under it by requests and urllib3
+    (in ``args``, ``reason``, ``__cause__`` and ``__context__``), each once.
     """
     seen: set[int] = set()
     pending: list[BaseException] = [exc]
@@ -42,8 +47,7 @@ def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | Non
         if id(current) in seen:
             continue
         seen.add(id(current))
-        if isinstance(current, ssl.SSLCertVerificationError):
-            return current
+        yield current
         pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
         reason = getattr(current, "reason", None)
         if isinstance(reason, BaseException):
@@ -51,7 +55,61 @@ def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | Non
         for linked in (current.__cause__, current.__context__):
             if linked is not None:
                 pending.append(linked)
+
+
+def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
+    """Find the certificate verification failure under the wrappers requests and
+    urllib3 add, or None when the TLS error is something else (e.g. the peer
+    closing the connection mid-handshake).
+    """
+    for current in _causes(exc):
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return current
     return None
+
+
+def _without_userinfo(url: str) -> str:
+    """The URL with any ``user:password@`` removed, safe to put in an error.
+
+    Splits on characters alone rather than with ``urlsplit``, which rejects
+    some credentials that requests accepts (such as ``pa[ss]``).
+    """
+    scheme, sep, rest = url.partition("://")
+    if not sep:
+        return url
+    end = min((i for i in map(rest.find, "/?#") if i >= 0), default=len(rest))
+    authority = rest[:end]
+    if "@" not in authority:
+        return url
+    return f"{scheme}://{authority.rpartition('@')[2]}{rest[end:]}"
+
+
+def _failed_to_connect(exc: requests.exceptions.ConnectionError) -> bool:
+    """Whether the connection itself failed (refused, unknown host, connect
+    timeout), so no request reached the runtime. A connection dropped after the
+    request was sent is not this: the runtime may have acted on it.
+
+    Reads only what requests itself wraps (the urllib3 ``MaxRetryError`` and
+    its ``reason``), never ``__context__``, which can hold an earlier attempt.
+    """
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return True
+    return any(
+        isinstance(arg, MaxRetryError)
+        and isinstance(arg.reason, Urllib3ConnectTimeoutError)
+        for arg in exc.args
+    )
+
+
+def _connection_failure_reason(exc: BaseException) -> str:
+    """Return the operating system's reason a connection failed ("Connection
+    refused", a DNS lookup failure), or the exception's own text when no OS
+    error is wrapped under it.
+    """
+    for current in _causes(exc):
+        if isinstance(current, OSError) and current.strerror:
+            return current.strerror
+    return str(exc)
 
 
 class _Retry(Retry):
@@ -260,7 +318,12 @@ class HttpRequests:
 
         A certificate verification failure raises `SpiceTLSError` naming the URL
         and the reason, rather than a raw ``requests`` exception. Other TLS
-        errors are retried as before and re-raised unchanged.
+        errors are retried as before and re-raised unchanged. A runtime that
+        cannot be reached (connection refused, unknown host, connect timeout)
+        raises `SpiceConnectionError` once the retries are spent. A connection
+        that drops after the request was sent, and a failure to reach a
+        configured proxy, are re-raised unchanged. Error messages never
+        include the ``user:password@`` part of a URL.
         """
         try:
             return operation(url=url, verify=self.verify, **kwargs)
@@ -276,10 +339,29 @@ class HttpRequests:
                 "runtime's certificate>"
             )
             raise SpiceTLSError(
-                f"TLS certificate verification failed for {url}: "
+                f"TLS certificate verification failed for {_without_userinfo(url)}: "
                 f"certificate verify failed: {cert_error.verify_message or cert_error}; "
                 f"{hint}"
             ) from exc
+        except requests.exceptions.ProxyError:
+            raise
+        except requests.exceptions.ConnectionError as exc:
+            if not _failed_to_connect(exc):
+                raise
+            error_type = (
+                SpiceConnectTimeoutError
+                if isinstance(exc, requests.exceptions.ConnectTimeout)
+                else SpiceConnectionError
+            )
+            error = error_type(
+                f"could not reach the Spice runtime at {_without_userinfo(url)}: "
+                f"{_connection_failure_reason(exc)}; check that the runtime is "
+                f"running and that http_url ({_without_userinfo(self.base_url)}) is its "
+                "HTTP address"
+            )
+            error.request = exc.request
+            error.response = exc.response
+            raise error from exc
 
     def prepare_param(self, params: dict[str, Any]) -> dict[str, Any]:
         for k, val in params.items():
