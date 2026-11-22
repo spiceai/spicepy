@@ -250,3 +250,21 @@ def test_connect_timeout_keeps_the_failed_request() -> None:
         http.send_request_raw("GET", "/v1/ready")
 
     assert raised.value.request is sent
+
+
+def test_reason_ignores_an_unrelated_exception_being_handled() -> None:
+    http = HttpRequests("http://127.0.0.1:8090", {})
+
+    def timed_out(**_: Any) -> requests.Response:
+        raise requests.exceptions.ConnectTimeout("connect timed out")
+
+    http.session.get = timed_out  # type: ignore[method-assign]
+
+    try:
+        raise PermissionError(13, "Permission denied")
+    except PermissionError:
+        with pytest.raises(SpiceConnectTimeoutError) as raised:
+            http.send_request_raw("GET", "/v1/ready")
+
+    assert "Permission denied" not in str(raised.value)
+    assert "connect timed out" in str(raised.value)
