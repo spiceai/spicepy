@@ -77,16 +77,20 @@ def _without_userinfo(url: str) -> str:
     return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
 
 
-def _failed_to_connect(exc: BaseException) -> bool:
+def _failed_to_connect(exc: requests.exceptions.ConnectionError) -> bool:
     """Whether the connection itself failed (refused, unknown host, connect
     timeout), so no request reached the runtime. A connection dropped after the
     request was sent is not this: the runtime may have acted on it.
+
+    Reads only what requests itself wraps (the urllib3 ``MaxRetryError`` and
+    its ``reason``), never ``__context__``, which can hold an earlier attempt.
     """
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return True
     return any(
-        isinstance(
-            cause, (Urllib3ConnectTimeoutError, requests.exceptions.ConnectTimeout)
-        )
-        for cause in _causes(exc)
+        isinstance(arg, MaxRetryError)
+        and isinstance(arg.reason, Urllib3ConnectTimeoutError)
+        for arg in exc.args
     )
 
 

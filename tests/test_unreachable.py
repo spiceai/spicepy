@@ -166,3 +166,33 @@ def test_connection_dropped_after_the_request_is_raised_unchanged() -> None:
 
     assert received and received[0].startswith(b"POST /v1/queries")
     assert not isinstance(raised.value, SpiceConnectionError)
+
+
+def test_a_retry_inside_the_handler_is_classified_on_its_own(
+    refused_url: str,
+) -> None:
+    received: list[bytes] = []
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+
+        def accept_then_close() -> None:
+            conn, _ = server.accept()
+            with conn:
+                received.append(conn.recv(65536))
+
+        thread = threading.Thread(target=accept_then_close, daemon=True)
+        thread.start()
+
+        try:
+            HttpRequests(refused_url, {}).send_request_raw("GET", "/v1/ready")
+        except SpiceConnectionError:
+            with pytest.raises(requests.exceptions.ConnectionError) as raised:
+                HttpRequests(f"http://127.0.0.1:{port}", {}).send_request_raw(
+                    "POST", "/v1/queries", body="SELECT 1"
+                )
+        thread.join(timeout=5)
+
+    assert received and received[0].startswith(b"POST /v1/queries")
+    assert not isinstance(raised.value, SpiceConnectionError)
