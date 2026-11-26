@@ -38,7 +38,10 @@ class RefreshOpts:
 
 def _causes(exc: BaseException) -> Iterator[BaseException]:
     """Yield ``exc`` and every exception wrapped under it by requests and urllib3
-    (in ``args``, ``reason``, ``__cause__`` and ``__context__``), each once.
+    (in ``args``, ``reason`` and ``__cause__``), each once.
+
+    ``__context__`` is not followed: it holds whatever exception was being
+    handled when this one was raised, which can be unrelated to this failure.
     """
     seen: set[int] = set()
     pending: list[BaseException] = [exc]
@@ -52,9 +55,8 @@ def _causes(exc: BaseException) -> Iterator[BaseException]:
         reason = getattr(current, "reason", None)
         if isinstance(reason, BaseException):
             pending.append(reason)
-        for linked in (current.__cause__, current.__context__):
-            if linked is not None:
-                pending.append(linked)
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
 
 
 def _certificate_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
